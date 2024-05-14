@@ -1,0 +1,140 @@
+using Selenium WebDriver -
+launch a browser -
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+// Create an instance of the ChromeDriver
+IWebDriver driver = new ChromeDriver();
+// Open a URL in the browser
+driver.Navigate().GoToUrl("https://www.example.com");
+
+locate elements -
+FindElement(By.Id("id"))
+FindElement(By.Name("name"))
+FindElement(By.XPath("xpath"))
+FindElement(By.CssSelector("cssSelector"))
+
+perform actions on elements -
+Click()
+SendKeys("text")
+Clear()
+GetAttribute("attribute")
+
+handle dropdowns -
+using OpenQA.Selenium.Support.UI;
+// Select the dropdown element
+IWebElement dropdown = driver.FindElement(By.Id("dropdown"));
+// Create a SelectElement instance
+SelectElement select = new SelectElement(dropdown);
+// Select an option by visible text
+select.SelectByText("Option 1");
+// Select an option by value
+select.SelectByValue("value1");
+// Select an option by index
+select.SelectByIndex(0);
+
+handle alerts -
+SwitchTo()
+using OpenQA.Selenium;
+// Switch to the alert
+IAlert alert = driver.SwitchTo().Alert;
+// Accept the alert
+alert.Accept();
+// Dismiss the alert
+alert.Dismiss();
+// Get the text of the alert
+string alertText = alert.Text;
+
+handle frames -
+SwitchTo() method
+using OpenQA.Selenium;
+// Switch to a frame by index
+driver.SwitchTo().Frame(0);
+// Switch to a frame by name or ID
+driver.SwitchTo().Frame("frameName");
+// Switch back to the default content
+driver.SwitchTo().DefaultContent();
+
+handle multiple windows or tabs -
+SwitchTo() method
+using OpenQA.Selenium;
+// Get the current window handle
+string currentWindowHandle = driver.CurrentWindowHandle;
+// Get the handles of all open windows
+List<string> windowHandles = driver.WindowHandles.ToList();
+// Switch to a new window
+driver.SwitchTo().Window(windowHandles[1]);
+// Switch back to the original window
+driver.SwitchTo().Window(currentWindowHandle);
+
+perform mouse hover actions -
+use OpenQA.Selenium.Interactions namespace
+using OpenQA.Selenium.Interactions;
+// Create an instance of the Actions class
+Actions actions = new Actions(driver);
+// Move the mouse to the element
+actions.MoveToElement(element).Perform();
+
+capture screenshots -
+use ITakesScreenshot interface
+using OpenQA.Selenium;
+// Capture a screenshot
+Screenshot screenshot = ((ITakesScreenshot)driver).GetScreenshot();
+// Save the screenshot to a file
+screenshot.SaveAsFile("path/to/screenshot.png", ScreenshotImageFormat.Png);
+
+handle browser cookies -
+using OpenQA.Selenium;
+// Get all cookies
+var cookies = driver.Manage().Cookies.AllCookies;
+// Add a new cookie
+driver.Manage().Cookies.AddCookie(new Cookie("name", "value"));
+// Delete a cookie
+driver.Manage().Cookies.DeleteCookieNamed("cookieName");
+
+perform scrolling -
+use JavaScript execution
+using OpenQA.Selenium;
+// Scroll to the bottom of the page
+((IJavaScriptExecutor)driver).ExecuteScript("window.scrollTo(0, document.body.scrollHeight)");
+// Scroll to a specific element
+((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].scrollIntoView(true);", element);
+
+generate test reports -
+Selenium WebDriver with C# does not provide built-in test reporting. However, you can use third-party libraries like NUnit or SpecFlow 
+to generate test reports. These frameworks provide features for test organization, assertions, and test result reporting.
+
+handle test data -
+Test data can be handled in Selenium WebDriver with C# by using various approaches:
+Reading test data from external files like Excel, CSV, or JSON.
+Using data providers or test data factories to generate test data dynamically.
+Storing test data in variables or constants within the test code.
+
+handle browser navigation -
+Navigate().GoToUrl("url")
+Navigate().Back()
+Navigate().Forward()
+Navigate().Refresh()
+
+handle browser window resizing -
+using the Manage().Window
+using OpenQA.Selenium;
+// Maximize the browser window
+driver.Manage().Window.Maximize();
+// Set the browser window size
+driver.Manage().Window.Size = new Size(800, 600);
+
+handle browser authentication prompts -
+Selenium WebDriver with C# does not have built-in support for handling browser authentication prompts. 
+However, you can include the username and password in the URL itself, like "http://username:password@example.com", 
+to bypass the authentication prompt.
+
+handle browser-specific issues -
+To handle browser-specific issues in Selenium WebDriver with C#, you can use browser-specific capabilities or options. 
+For example, when using ChromeDriver, you can set specific options like --start-maximized for maximizing the browser window 
+or --headless for running in headless mode.
+
+handle file uploads -
+use the SendKeys() method
+IWebElement fileInput = driver.FindElement(By.Id("fileInput"));
+fileInput.SendKeys("path/to/file.txt");
+
