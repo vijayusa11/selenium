@@ -138,3 +138,14 @@ use the SendKeys() method
 IWebElement fileInput = driver.FindElement(By.Id("fileInput"));
 fileInput.SendKeys("path/to/file.txt");
 
+if (columnIndex == 2)
+{
+    formulas = $"IFERROR(IF(VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0) = \"\", \"-\", VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)), \"-\")";
+}
+else
+{
+    formulas = $"VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)";
+}
+
+rowXero++;
+rowDIBB++;
