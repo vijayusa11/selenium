@@ -166,3 +166,17 @@ else
 
 rowXero++;
 rowDIBB++;
+
+........
+
+if (columnIndex == 2)
+{
+    formulas = $"IFERROR(IF(VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0) = \"\", \"-\", IF(ISBLANK(VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)), \"-\", VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0))), \"-\")";
+}
+else
+{
+    formulas = $"VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)";
+}
+
+rowXero++;
+rowDIBB++;
