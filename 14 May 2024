@@ -209,3 +209,7 @@ else
 
 rowXero++;
 rowDIBB++;
+
+........
+
+formulas = $"IFERROR(IF(OR(ISBLANK(B{rowAdd}), ISBLANK(C{rowAdd})), \"-\", B{rowAdd} + C{rowAdd}), \"-\")";
