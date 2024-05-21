@@ -194,3 +194,18 @@ else
 
 rowXero++;
 rowDIBB++;
+
+........
+
+if (columnIndex == 2)
+{
+    string lookupFormula = $"VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)";
+    formulas = $"IFERROR(IF(LEN({lookupFormula}) = 0, \"-\", {lookupFormula}), \"-\")";
+}
+else
+{
+    formulas = $"VLOOKUP(A{rowXero}, '{xeroSheetName}'!$J$9:$K${sheetXERO.LastRowNum - 83}, 2, 0)";
+}
+
+rowXero++;
+rowDIBB++;
