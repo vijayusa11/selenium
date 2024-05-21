@@ -213,3 +213,39 @@ rowDIBB++;
 ........
 
 formulas = $"IFERROR(IF(OR(ISBLANK(B{rowAdd}), ISBLANK(C{rowAdd})), \"-\", B{rowAdd} + C{rowAdd}), \"-\")";
+
+.....
+
+for (int i = 0; i < numberOfRows; i++)
+{
+    IRow newRow = sheet.CreateRow(i);
+
+    for (int j = 0; j < 12; j++)
+    {
+        ICell newCell = newRow.CreateCell(j);
+
+        // Assuming item is an object containing data for the row
+        // You can replace item.EntryId, item.Property1, etc., with actual values or logic
+        if (j == 0)
+        {
+            newCell.SetCellValue(item.EntryId);
+            newCell.CellStyle = numberStyle2;
+        }
+        else if (j >= 1 && j <= 6)
+        {
+            // Replace item.Property1, item.Property2, etc., with actual values
+            string cellValue = item.GetType().GetProperty($"Property{j}").GetValue(item, null)?.ToString();
+
+            if (string.IsNullOrEmpty(cellValue))
+            {
+                newCell.SetCellValue("-");
+            }
+            else
+            {
+                newCell.SetCellValue(cellValue);
+            }
+
+            // Apply styles as needed
+            newCell.CellStyle = textStyle; // or any other style you want to apply
+        }
+       ⬤
