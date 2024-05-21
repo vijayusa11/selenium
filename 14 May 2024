@@ -248,4 +248,52 @@ for (int i = 0; i < numberOfRows; i++)
             // Apply styles as needed
             newCell.CellStyle = textStyle; // or any other style you want to apply
         }
+
+.......
+
+int getTransSummarySheet = sheet.LastRowNum + 1;
+int lastRowForTrans = sheet.LastRowNum + comapreEntryId.Count;
+
+var totalItemListGroupBy = bookingSheetEntryId.GroupBy(g => g.EntryId);
+
+foreach (var item in comapreEntryId)
+{
+    for (int rowIndexTrans = getTransSummarySheet; rowIndexTrans <= lastRowForTrans; rowIndexTrans++)
+    {
+        IRow row = sheet.CreateRow(rowIndexTrans);
+
+        for (int colIndex = 0; colIndex < 12; colIndex++)
+        {
+            ICell cell = row.CreateCell(colIndex);
+
+            if (colIndex == 0)
+            {
+                cell.SetCellValue(item.EntryId);
+                cell.CellStyle = numberStyle2;
+            }
+            else if (colIndex >= 1 && colIndex <= 6)
+            {
+                // Replace the below logic to fetch the correct property based on your data structure
+                // Assuming `item` has properties named Property1, Property2, ..., Property6
+                string propertyName = $"Property{colIndex}";
+                var propertyValue = item.GetType().GetProperty(propertyName)?.GetValue(item, null)?.ToString();
+
+                if (string.IsNullOrEmpty(propertyValue))
+                {
+                    cell.SetCellValue("-");
+                }
+                else
+                {
+                    cell.SetCellValue(propertyValue);
+                }
+
+                // Apply the desired cell style
+                cell.CellStyle = textStyle; // Use your specific style here
+            }
+        }
+
+        getTransSummarySheet++;
+        break; // This break will exit the foreach loop after the first iteration
+    }
+}
        ⬤
