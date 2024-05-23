@@ -346,3 +346,81 @@ for (int cellIndex = 7; cellIndex < 13; cellIndex++)
 
     rowsValue++;
 }
+
+0pppppppppppppppppppppppppppppppp
+
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+class Program
+{
+    static void Main()
+    {
+        try
+        {
+            IWorkbook workbook = new XSSFWorkbook();
+            ISheet destinationSheet = workbook.CreateSheet("Sheet1");
+
+            // Dummy data to represent dynamic input
+            var xeroDuplicateId = GetDynamicXeroDuplicateId();
+            var totalItemListDistinct = xeroDuplicateId.DistinctBy(x => x.xerold).ToList();
+
+            ICellStyle numberStyleGeneral = workbook.CreateCellStyle();
+            IDataFormat dataFormat = workbook.CreateDataFormat();
+            numberStyleGeneral.DataFormat = dataFormat.GetFormat("General");
+
+            int rowIndex = 8; // Starting row index
+
+            // Write distinct items
+            foreach (var item in totalItemListDistinct)
+            {
+                IRow destinationRow = destinationSheet.GetRow(rowIndex) ?? destinationSheet.CreateRow(rowIndex);
+                ICell destinationCell = destinationRow.CreateCell(9); // Writing to column J (index 9)
+
+                if (string.IsNullOrEmpty(item.xerold))
+                {
+                    destinationCell.SetCellValue("-");
+                }
+                else
+                {
+                    destinationCell.SetCellValue(item.xerold);
+                }
+
+                destinationCell.CellStyle = numberStyleGeneral;
+                rowIndex++;
+            }
+
+            // Fill remaining cells with "-"
+            for (int i = rowIndex; i < xeroDuplicateId.Count + 8; i++)
+            {
+                IRow destinationRow = destinationSheet.GetRow(i) ?? destinationSheet.CreateRow(i);
+                ICell destinationCell = destinationRow.CreateCell(9); // Writing to column J (index 9)
+                destinationCell.SetCellValue("-");
+                destinationCell.CellStyle = numberStyleGeneral;
+            }
+
+            // Write the workbook to a file
+            using (var fs = new FileStream("XerofileExcelSheet.xlsx", FileMode.Create, FileAccess.Write))
+            {
+                workbook.Write(fs);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("An error occurred: " + ex.Message);
+        }
+    }
+
+    // Method to simulate dynamic input for xeroDuplicateId
+    static List<dynamic> GetDynamicXeroDuplicateId()
+    {
+        // Generate some example data. Replace this with your dynamic data fetching logic.
+        return Enumerable.Range(1, new Random().Next(1000, 4000)) // Simulating dynamic size
+                         .Select(i => new { xerold = i % 2 == 0 ? i.ToString() : string.Empty })
+                         .ToList();
+    }
+}
