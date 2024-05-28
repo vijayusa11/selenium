@@ -424,3 +424,69 @@ class Program
                          .ToList();
     }
 }
+
+......
+
+It looks like you're trying to create or alter a stored procedure named `SaveMastersClient` in SQL Server. I've corrected the syntax and structure to ensure it works as expected. Here's the revised full stored procedure:
+
+```sql
+USE RGContractorPortal;
+GO
+
+SET ANSI_NULLS ON;
+GO
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE [dbo].[SaveMastersClient]
+    @ClientName NVARCHAR(200),
+    @IsActiveClient BIT = 1,
+    @AccountManagerId INT,
+    @PayrollManagerId INT,
+    @CreatedBy INT,
+    @CreatedDate DATETIME = SYSDATETIME()
+AS
+BEGIN
+    -- Check if @ClientName is NULL or empty
+    IF ISNULL(@ClientName, '') = ''
+    BEGIN
+        PRINT 'ClientName cannot be NULL or empty.';
+        RETURN;
+    END
+
+    -- Check if the client already exists
+    IF EXISTS (SELECT 1 FROM Client WHERE ClientName = @ClientName)
+    BEGIN
+        -- If client exists, update the record
+        UPDATE Client
+        SET 
+            ClientName = @ClientName,
+            IsActive = @IsActiveClient,
+            AccountManagerId = @AccountManagerId,
+            PayrollManagerId = @PayrollManagerId,
+            UpdatedBy = @CreatedBy,
+            UpdatedDate = @CreatedDate
+        WHERE 
+            ClientName = @ClientName;
+    END
+    ELSE
+    BEGIN
+        -- If client does not exist, insert a new record
+        INSERT INTO Client (ClientName, IsActive, AccountManagerId, PayrollManagerId, CreatedBy, CreatedDate)
+        VALUES (@ClientName, @IsActiveClient, @AccountManagerId, @PayrollManagerId, @CreatedBy, @CreatedDate);
+    END
+END;
+GO
+```
+
+Here's an explanation of the key parts:
+
+1. **Database Context**: The procedure starts with `USE RGContractorPortal;` to ensure the operations are performed in the correct database.
+2. **SET Statements**: `SET ANSI_NULLS ON;` and `SET QUOTED_IDENTIFIER ON;` are included to ensure compatibility and correct handling of null values and quoted identifiers.
+3. **Procedure Parameters**: The procedure takes several parameters, including `@ClientName`, `@IsActiveClient`, `@AccountManagerId`, `@PayrollManagerId`, `@CreatedBy`, and `@CreatedDate`.
+4. **Client Name Validation**: It checks if `@ClientName` is null or empty and exits if so.
+5. **Check for Existing Client**: The procedure checks if a client with the specified name already exists.
+6. **Update or Insert Logic**: If the client exists, it updates the record. If the client doesn't exist, it inserts a new record.
+
+Make sure to adjust the table name and columns (`ClientName`, `IsActive`, `AccountManagerId`, `PayrollManagerId`, `CreatedBy`, `CreatedDate`, `UpdatedBy`, `UpdatedDate`) to match your actual schema.
