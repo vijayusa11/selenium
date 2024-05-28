@@ -168,3 +168,93 @@ EXEC [dbo].[SaveMastersClient]
     @CreatedDate = '2024-08-01';
 
 -- In
+
+.....
+
+It seems like there are multiple formatting issues and syntax errors in the provided script. Let's fix the stored procedure and ensure it's correctly formatted and functional.
+
+### Corrected Stored Procedure
+
+Here’s the corrected stored procedure for `SaveMastersContractorUserGroup`:
+
+```sql
+USE [RGContractorPortal BETA]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE OR ALTER PROCEDURE [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName NVARCHAR(200),
+    @IsActiveContractorUserGroup BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Check if @ContractorUserGroupName is NULL or empty
+    IF ISNULL(@ContractorUserGroupName, '') = ''
+    BEGIN
+        PRINT 'Contractor User Group Name cannot be NULL or empty.';
+        RETURN;
+    END;
+
+    -- Check if the ContractorUserGroupName already exists
+    IF EXISTS (SELECT 1 FROM ContractorUserGroup WHERE ContractorUserGroupName = @ContractorUserGroupName)
+    BEGIN
+        -- If Contractor User Group exists, update the record
+        UPDATE ContractorUserGroup
+        SET
+            ContractorUserGroupName = @ContractorUserGroupName,
+            IsActive = @IsActiveContractorUserGroup
+        WHERE
+            ContractorUserGroupName = @ContractorUserGroupName;
+    END
+    ELSE
+    BEGIN
+        -- If Contractor User Group does not exist, insert a new record
+        INSERT INTO ContractorUserGroup (ContractorUserGroupName, IsActive)
+        VALUES (@ContractorUserGroupName, @IsActiveContractorUserGroup);
+    END;
+END;
+GO
+```
+
+### Dummy Data Insertion Using the Stored Procedure
+
+To insert dummy data using the updated stored procedure, you can use the following `EXEC` statements:
+
+```sql
+-- Inserting Contractor User Group A
+EXEC [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName = 'Contractor Group A',
+    @IsActiveContractorUserGroup = 1;
+
+-- Inserting Contractor User Group B
+EXEC [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName = 'Contractor Group B',
+    @IsActiveContractorUserGroup = 0;
+
+-- Inserting Contractor User Group C
+EXEC [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName = 'Contractor Group C',
+    @IsActiveContractorUserGroup = 1;
+
+-- Inserting Contractor User Group D
+EXEC [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName = 'Contractor Group D',
+    @IsActiveContractorUserGroup = 0;
+
+-- Inserting Contractor User Group E
+EXEC [dbo].[SaveMastersContractorUserGroup]
+    @ContractorUserGroupName = 'Contractor Group E',
+    @IsActiveContractorUserGroup = 1;
+```
+
+### Explanation:
+1. **Null or Empty Check**: Ensures `@ContractorUserGroupName` is not null or empty.
+2. **Existence Check for Contractor User Group**: Checks if a Contractor User Group with the given `@ContractorUserGroupName` already exists in the `ContractorUserGroup` table.
+3. **Update Statement**: If the Contractor User Group exists, it updates the existing record.
+4. **Insert Statement**: If the Contractor User Group does not exist, it inserts a new record.
