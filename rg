@@ -258,3 +258,156 @@ EXEC [dbo].[SaveMastersContractorUserGroup]
 2. **Existence Check for Contractor User Group**: Checks if a Contractor User Group with the given `@ContractorUserGroupName` already exists in the `ContractorUserGroup` table.
 3. **Update Statement**: If the Contractor User Group exists, it updates the existing record.
 4. **Insert Statement**: If the Contractor User Group does not exist, it inserts a new record.
+
+
+
+
+..........
+
+
+
+
+
+The error you encountered relates to a foreign key constraint violation on the `CountryId` column. This happens when you try to insert or update a record in the `ContractorBank` table with a `BankCountryId` that does not exist in the referenced `Country` table.
+
+To address this issue, you can include a validation step before performing the insert or update operations to ensure that the `BankCountryId` exists in the `Country` table. Here's the revised stored procedure with this validation:
+
+```sql
+USE [RGContractorPortal BETA]
+GO
+
+-- Object: Stored Procedure [dbo].[SaveMasterContractorBank]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE OR ALTER PROCEDURE [dbo].[SaveMasterContractorBank]
+    @ContractorId int,
+    @BankAccountName nvarchar(400),
+    @RoutingNumber nvarchar(400) NULL,
+    @BankName nvarchar(400),
+    @BankAddress nvarchar(1000),
+    @BankNumber nvarchar(400) NULL,
+    @IBANNumber nvarchar(400) NULL,
+    @SORTCode nvarchar(400) NULL,
+    @BIC nvarchar(400) NULL,
+    @Amount decimal NULL,
+    @CreatedBy int NULL,
+    @CreatedDate datetime NULL,
+    @IsActive bit NULL,
+    @BankPostCode nvarchar(20) NULL,
+    @BankCountryId smallint NULL,
+    @IsPrimaryBank bit NULL,
+    @SpecificPayTypes nvarchar(500) NULL,
+    @SpecificPayTypesTwo nvarchar(500) NULL,
+    @SpecificPayTypesThree nvarchar(500) NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Check if Bank Account Name is NULL or empty
+    IF ISNULL(@BankAccountName, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Account Name cannot be NULL or empty';
+        RETURN;
+    END;
+
+    -- Check if Bank Name is NULL or empty
+    IF ISNULL(@BankName, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Name cannot be NULL or empty';
+        RETURN;
+    END;
+
+    -- Check if Bank Address is NULL or empty
+    IF ISNULL(@BankAddress, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Address cannot be NULL or empty';
+        RETURN;
+    END;
+
+    -- Check if the BankCountryId is valid
+    IF NOT EXISTS (SELECT 1 FROM Country WHERE CountryId = @BankCountryId)
+    BEGIN
+        PRINT 'Invalid Bank Country ID';
+        RETURN;
+    END;
+
+    -- Check if the Contractor status already exists
+    IF EXISTS (SELECT 1 FROM ContractorBank WHERE ContractorId = @ContractorId)
+    BEGIN
+        -- If Contractor Status exists, update the record
+        UPDATE ContractorBank
+        SET BankAccountName = @BankAccountName,
+            RoutingNumber = @RoutingNumber,
+            BankName = @BankName,
+            BankAddress = @BankAddress,
+            BankNumber = @BankNumber,
+            IBANNumber = @IBANNumber,
+            SORTCode = @SORTCode,
+            BIC = @BIC,
+            Amount = @Amount,
+            CreatedBy = @CreatedBy,
+            CreatedDate = @CreatedDate,
+            IsActive = @IsActive,
+            BankPostCode = @BankPostCode,
+            BankCountryId = @BankCountryId,
+            SpecificPayTypes = @SpecificPayTypes,
+            IsPrimaryBank = @IsPrimaryBank,
+            SpecificPayTypesTwo = @SpecificPayTypesTwo,
+            SpecificPayTypesThree = @SpecificPayTypesThree
+        WHERE ContractorId = @ContractorId;
+    END
+    ELSE
+    BEGIN
+        -- If Contractor Status does not exist, insert new record
+        INSERT INTO ContractorBank (
+            BankAccountName,
+            RoutingNumber,
+            BankName,
+            BankAddress,
+            BankNumber,
+            IBANNumber,
+            SORTCode,
+            BIC,
+            Amount,
+            CreatedBy,
+            CreatedDate,
+            IsActive,
+            BankPostCode,
+            BankCountryId,
+            SpecificPayTypes,
+            IsPrimaryBank,
+            SpecificPayTypesTwo,
+            SpecificPayTypesThree
+        ) VALUES (
+            @BankAccountName,
+            @RoutingNumber,
+            @BankName,
+            @BankAddress,
+            @BankNumber,
+            @IBANNumber,
+            @SORTCode,
+            @BIC,
+            @Amount,
+            @CreatedBy,
+            @CreatedDate,
+            @IsActive,
+            @BankPostCode,
+            @BankCountryId,
+            @SpecificPayTypes,
+            @IsPrimaryBank,
+            @SpecificPayTypesTwo,
+            @SpecificPayTypesThree
+        );
+    END
+END;
+GO
+```
+
+### Key Additions:
+1. **Validation of `BankCountryId`**: Added a check to ensure the provided `BankCountryId` exists in the `Country` table before proceeding with insert or update operations. This will prevent the foreign key constraint violation.
+2. **Consistent Use of Parameters**: Ensured all parameters are consistently used and validated.
+
+This should resolve the foreign key constraint error. Be sure to test this script thoroughly to confirm it works as expected.
