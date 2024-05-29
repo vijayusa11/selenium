@@ -1,0 +1,114 @@
+It appears you've shared a corrupted or mangled SQL script for a stored procedure named `SaveMastersContractorBank`. Below is a cleaned-up and corrected version of this stored procedure based on typical SQL syntax and structure. Please review and modify it according to your actual requirements and data structure.
+
+```sql
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE OR ALTER PROCEDURE [dbo].[SaveMastersContractorBank]
+    @ContractorId INT,
+    @BankAccountName NVARCHAR(400),
+    @RoutingNumber NVARCHAR(400) NULL,
+    @BankName NVARCHAR(400),
+    @BankAddress NVARCHAR(1000),
+    @BankNumber NVARCHAR(400) NULL,
+    @IBANNumber NVARCHAR(400) NULL,
+    @SORTCode NVARCHAR(400) NULL,
+    @BIC NVARCHAR(400) NULL,
+    @Amount DECIMAL(18, 2) NULL,
+    @CreatedBy INT NULL,
+    @CreatedDate DATETIME NULL,
+    @IsActive BIT NULL,
+    @BankPostCode NVARCHAR(20) NULL,
+    @BankCountryId SMALLINT NULL,
+    @IsPrimaryBank BIT NULL,
+    @SpecificPayTypes NVARCHAR(500) NULL,
+    @SpecificPayTypesTwo NVARCHAR(500) NULL,
+    @SpecificPayTypesThree NVARCHAR(500) NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Check if Bank Name is NULL or empty
+    IF ISNULL(@BankName, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Name cannot be NULL or empty.';
+        RETURN;
+    END;
+
+    -- Check if Bank Account Name is NULL or empty
+    IF ISNULL(@BankAccountName, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Account Name cannot be NULL or empty.';
+        RETURN;
+    END;
+
+    -- Check if Bank Address is NULL or empty
+    IF ISNULL(@BankAddress, '') = ''
+    BEGIN
+        PRINT 'Contractor Bank Address cannot be NULL or empty.';
+        RETURN;
+    END;
+
+    -- Check if the BankCountryId is valid
+    IF NOT EXISTS (SELECT 1 FROM Country WHERE CountryId = @BankCountryId)
+    BEGIN
+        PRINT 'Invalid Bank Country ID';
+        RETURN;
+    END;
+
+    -- Check if the Contractor Status already exists
+    IF EXISTS (SELECT 1 FROM ContractorBank WHERE ContractorId = @ContractorId)
+    BEGIN
+        -- If Contractor Status exists, update the record
+        UPDATE ContractorBank
+        SET 
+            BankAccountName = @BankAccountName,
+            RoutingNumber = @RoutingNumber,
+            BankName = @BankName,
+            BankAddress = @BankAddress,
+            BankNumber = @BankNumber,
+            IBANNumber = @IBANNumber,
+            SORTCode = @SORTCode,
+            BIC = @BIC,
+            Amount = @Amount,
+            CreatedBy = @CreatedBy,
+            CreatedDate = @CreatedDate,
+            IsActive = @IsActive,
+            BankPostCode = @BankPostCode,
+            BankCountryId = @BankCountryId,
+            SpecificPayTypes = @SpecificPayTypes,
+            IsPrimaryBank = @IsPrimaryBank,
+            SpecificPayTypesTwo = @SpecificPayTypesTwo,
+            SpecificPayTypesThree = @SpecificPayTypesThree
+        WHERE ContractorId = @ContractorId;
+    END
+    ELSE
+    BEGIN
+        -- If Contractor Status does not exist, insert a new record
+        INSERT INTO ContractorBank
+        (
+            ContractorId, BankAccountName, RoutingNumber, BankName, BankAddress, BankNumber,
+            IBANNumber, SORTCode, BIC, Amount, CreatedBy, CreatedDate, IsActive,
+            BankPostCode, BankCountryId, SpecificPayTypes, IsPrimaryBank, SpecificPayTypesTwo, SpecificPayTypesThree
+        )
+        VALUES
+        (
+            @ContractorId, @BankAccountName, @RoutingNumber, @BankName, @BankAddress, @BankNumber,
+            @IBANNumber, @SORTCode, @BIC, @Amount, @CreatedBy, @CreatedDate, @IsActive,
+            @BankPostCode, @BankCountryId, @SpecificPayTypes, @IsPrimaryBank, @SpecificPayTypesTwo, @SpecificPayTypesThree
+        );
+    END;
+END;
+GO
+```
+
+This script includes:
+- Parameter declarations for the stored procedure.
+- Null and empty string checks for required fields.
+- Existence checks for foreign keys or reference data.
+- Conditional logic to either update an existing record or insert a new one based on whether the contractor's bank information already exists.
+
+Make sure to adjust the table and column names to match your actual database schema.
