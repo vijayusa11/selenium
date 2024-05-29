@@ -1,4 +1,6 @@
-It appears you've shared a corrupted or mangled SQL script for a stored procedure named `SaveMastersContractorBank`. Below is a cleaned-up and corrected version of this stored procedure based on typical SQL syntax and structure. Please review and modify it according to your actual requirements and data structure.
+The error message indicates that there is a foreign key constraint violation involving the `UserId` column in the `User` table. This likely occurs because the `CreatedBy` value being updated or inserted in the `ContractorBank` table does not exist in the `User` table.
+
+To handle this, you can add a check to ensure that the `CreatedBy` value exists in the `User` table before performing the update or insert operation. Here’s how you can modify the stored procedure to include this check:
 
 ```sql
 SET ANSI_NULLS ON
@@ -59,6 +61,13 @@ BEGIN
         RETURN;
     END;
 
+    -- Check if CreatedBy exists in the User table
+    IF @CreatedBy IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [User] WHERE UserId = @CreatedBy)
+    BEGIN
+        PRINT 'Invalid CreatedBy User ID';
+        RETURN;
+    END;
+
     -- Check if the Contractor Status already exists
     IF EXISTS (SELECT 1 FROM ContractorBank WHERE ContractorId = @ContractorId)
     BEGIN
@@ -105,10 +114,4 @@ END;
 GO
 ```
 
-This script includes:
-- Parameter declarations for the stored procedure.
-- Null and empty string checks for required fields.
-- Existence checks for foreign keys or reference data.
-- Conditional logic to either update an existing record or insert a new one based on whether the contractor's bank information already exists.
-
-Make sure to adjust the table and column names to match your actual database schema.
+This script includes a check to ensure that the `CreatedBy` value exists in the `User` table before proceeding with the update or insert operation. If the `CreatedBy` value is invalid, the procedure will print an error message and exit without making any changes.
