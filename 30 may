@@ -1,0 +1,142 @@
+It looks like you need to use the `Request.CreateResponse` and `Request.CreateErrorResponse` methods correctly and handle the file download path appropriately. Here's the corrected implementation with the necessary adjustments:
+
+### Corrected `ExportUserListing` Method
+
+```csharp
+public HttpResponseMessage ExportUserListing(PageListingModel pageListing, List<int> selectedIds)
+{
+    try
+    {
+        StringBuilder excelRows = new StringBuilder();
+        var userList = userRepository.GetUserListing(pageListing, selectedIds);
+
+        string fileName = "User_" + DateTime.Now.ToString("dd-yyyy-hhmmss") + ".csv";
+        string mainPath = "/UploadedFiles/" + commonService.GetUserId().ToString();
+        var folderPath = HttpContext.Current.Server.MapPath(mainPath);
+
+        // Create folder if needed
+        if (!Directory.Exists(folderPath))
+        {
+            Directory.CreateDirectory(folderPath);
+        }
+
+        string filePath = Path.Combine(folderPath, fileName);
+        using (StreamWriter sw = new StreamWriter(filePath, false))
+        {
+            // Set Headers
+            excelRows.AppendLine("Name,Email,IsAdmin,UserType,RoleName,Active");
+
+            // Set Data
+            if (userList != null && userList.Count > 0)
+            {
+                foreach (var user in userList)
+                {
+                    // Append each user data to excelRows
+                    excelRows.AppendLine($"{user.Name},{user.Email},{user.IsAdmin},{user.UserType},{user.RoleName},{user.Active}");
+                }
+            }
+
+            sw.Write(excelRows.ToString());
+            sw.Close();
+        }
+
+        // Return file in response
+        HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK);
+        response.Content = new StreamContent(new FileStream(filePath, FileMode.Open, FileAccess.Read));
+        response.Content.Headers.ContentDisposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+        {
+            FileName = fileName
+        };
+        response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+        return response;
+    }
+    catch (Exception ex)
+    {
+        // Handle the error and return a meaningful error message
+        return Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An error occurred while exporting user listing.", ex);
+    }
+}
+```
+
+### Explanation:
+
+1. **StringBuilder for CSV Rows**: Initializes a `StringBuilder` to accumulate CSV rows.
+2. **Get User List**: Fetches the user list based on `pageListing` and `selectedIds`.
+3. **File Name and Path**: Constructs the CSV file name with the current timestamp and sets the file path.
+4. **Create Directory**: Checks if the directory exists and creates it if not.
+5. **StreamWriter**: Opens a `StreamWriter` to write to the CSV file.
+6. **CSV Headers**: Adds the CSV headers.
+7. **Write User Data**: Loops through the user list and appends each user's data to `excelRows`.
+8. **Write CSV File**: Writes the accumulated rows to the file and closes the `StreamWriter`.
+9. **Return File in Response**: Creates an `HttpResponseMessage` with the file content, sets the content disposition header for download, and returns the response.
+10. **Error Handling**: Wraps the code in a try-catch block and returns an appropriate error message if something goes wrong.
+
+### Service Layer Update:
+
+Ensure that `userRepository.GetUserListing` can handle `PageListingModel` and `selectedIds`:
+
+```csharp
+public interface IUserService
+{
+    List<User> GetUserListing(PageListingModel pageListing, List<int> selectedIds);
+    HttpResponseMessage ExportUserListing(PageListingModel pageListing, List<int> selectedIds);
+}
+
+public class UserService : IUserService
+{
+    public List<User> GetUserListing(PageListingModel pageListing, List<int> selectedIds)
+    {
+        // Implement logic to get user listing based on the pageListing parameters and selectedIds
+        // ...
+    }
+
+    public HttpResponseMessage ExportUserListing(PageListingModel pageListing, List<int> selectedIds)
+    {
+        // Implement the CSV export logic as described above
+        // ...
+    }
+}
+```
+
+### Client-Side Example (JavaScript/AJAX):
+
+Here’s how you might send a request to the `export` endpoint from the client side using JavaScript:
+
+```javascript
+function exportSelectedUsers(pageListing, selectedIds) {
+    const data = {
+        pageListing: pageListing,
+        selectedIds: selectedIds
+    };
+
+    fetch('/api/user/export', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        } else {
+            throw new Error('Export failed');
+        }
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(new Blob([blob]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'UserExport.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+```
+
+This setup ensures the `ExportUserListing` method generates a CSV file based on the user list and allows the file to be downloaded through the client's browser.
