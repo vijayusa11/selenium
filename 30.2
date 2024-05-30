@@ -1,0 +1,166 @@
+### Correcting the Issues
+
+1. **Operator '>' cannot be applied to operands of type 'method group' and 'int'**:
+    - This error suggests that you might have a misplaced or incorrect comparison in your code. Ensure all comparisons are done correctly.
+
+2. **'UserService' does not implement interface member 'IUserService.ExportUserListing(PageListingModel, HttpResponseMessage)'**:
+    - Ensure your method signatures in the interface and the implementation match exactly.
+
+3. **'Request' does not contain a definition for 'CreateErrorResponse'**:
+    - Use `Request.CreateErrorResponse` within an API controller or replace it with `new HttpResponseMessage`.
+
+4. **'List<GetUserListing_Result>' does not contain a definition for 'Data'**:
+    - Ensure you are accessing the correct property of the result object.
+
+### Corrected Code
+
+#### UserService Interface and Implementation
+
+First, update the `IUserService` interface:
+
+```csharp
+public interface IUserService
+{
+    ResponseModel<List<GetUserListing_Result>> GetUserListing(PageListingModel pageListing);
+    HttpResponseMessage ExportUserListing(PageListingModel pageListing, List<int> selectedIds);
+}
+```
+
+Update the `UserService` class:
+
+```csharp
+public class UserService : IUserService
+{
+    private readonly IUserRepository _userRepository;
+    private readonly ICommonService _commonService;
+
+    public UserService(IUserRepository userRepository, ICommonService commonService)
+    {
+        _userRepository = userRepository;
+        _commonService = commonService;
+    }
+
+    public ResponseModel<List<GetUserListing_Result>> GetUserListing(PageListingModel pageListing)
+    {
+        var userList = _userRepository.GetUserListing(pageListing);
+        return _commonService.ReturnResponse(userList, true, "");
+    }
+
+    public HttpResponseMessage ExportUserListing(PageListingModel pageListing, List<int> selectedIds)
+    {
+        try
+        {
+            StringBuilder excelRows = new StringBuilder();
+            var userListResponse = _userRepository.GetUserListing(pageListing);
+            var userList = userListResponse; // Assuming GetUserListing returns a List<GetUserListing_Result>
+
+            string fileName = "User_" + DateTime.Now.ToString("dd-yyyy-hhmmss") + ".csv";
+            string mainPath = "/UploadedFiles/" + _commonService.GetUserId().ToString();
+            var folderPath = HttpContext.Current.Server.MapPath(mainPath);
+
+            // Create folder if needed
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            string filePath = Path.Combine(folderPath, fileName);
+            using (StreamWriter sw = new StreamWriter(filePath, false))
+            {
+                // Set Headers
+                excelRows.AppendLine("Name,Email,IsAdmin,UserType,RoleName,Active");
+
+                // Set Data
+                if (userList != null && userList.Count > 0)
+                {
+                    foreach (var user in userList)
+                    {
+                        // Append each user's data to excelRows
+                        excelRows.AppendLine($"{user.Name},{user.Email},{user.IsAdmin},{user.UserType},{user.RoleName},{user.Active}");
+                    }
+                }
+
+                sw.Write(excelRows.ToString());
+                sw.Close();
+            }
+
+            // Return file in response
+            HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK);
+            response.Content = new StreamContent(new FileStream(filePath, FileMode.Open, FileAccess.Read));
+            response.Content.Headers.ContentDisposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+            {
+                FileName = fileName
+            };
+            response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            // Handle the error and return a meaningful error message
+            HttpResponseMessage errorResponse = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent($"An error occurred while exporting user listing: {ex.Message}")
+            };
+            return errorResponse;
+        }
+    }
+}
+```
+
+### API Controller
+
+Ensure your API controller method correctly handles the request:
+
+```csharp
+[Authorize]
+[PermissionFilter(Permission.Export, Modules.User)]
+[HttpPost]
+[Route("export")]
+public HttpResponseMessage ExportClient(PageListingModel pageListing, List<int> selectedIds)
+{
+    return _userService.ExportUserListing(pageListing, selectedIds);
+}
+```
+
+### Client-Side Example (JavaScript/AJAX)
+
+Here’s how you might send a request to the `export` endpoint from the client side using JavaScript:
+
+```javascript
+function exportSelectedUsers(pageListing, selectedIds) {
+    const data = {
+        pageListing: pageListing,
+        selectedIds: selectedIds
+    };
+
+    fetch('/api/user/export', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        } else {
+            throw new Error('Export failed');
+        }
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(new Blob([blob]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'UserExport.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+```
+
+This setup ensures the `ExportUserListing` method generates a CSV file based on the user list filtered by `pageListing` and allows the file to be downloaded through the client's browser.
