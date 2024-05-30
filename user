@@ -1,0 +1,92 @@
+To ensure the export functionality operates as per the specific list selected, we need to update the `ExportClient` method to accept a parameter representing the selected list. Here’s a modified version of your code to achieve this:
+
+1. Add an additional parameter to the `ExportClient` method to specify the list selection.
+2. Ensure that the `_userService.ExportUserListing` method can handle this parameter.
+
+Here is the revised code:
+
+```csharp
+using System.Net;
+using System.Net.Http;
+using System.Web.Http;
+
+[Authorize]
+[PermissionFilter(Permission.View, Modules.User)]
+[HttpPost]
+[Route("list")]
+public HttpResponseMessage ClientList(PageListingModel pageListing)
+{
+    return Request.CreateResponse(HttpStatusCode.OK, _userService.GetUserListing(pageListing));
+}
+
+[Authorize]
+[PermissionFilter(Permission.Export, Modules.User)]
+[HttpPost]
+[Route("export")]
+public HttpResponseMessage ExportClient(PageListingModel pageListing, [FromBody] List<int> selectedIds)
+{
+    var exportData = _userService.ExportUserListing(pageListing, selectedIds);
+    return Request.CreateResponse(HttpStatusCode.OK, exportData);
+}
+```
+
+### Explanation:
+1. **Import Statements**: Ensure you have the required namespaces:
+   ```csharp
+   using System.Net;
+   using System.Net.Http;
+   using System.Web.Http;
+   ```
+2. **Route "list"**: This endpoint fetches the list of users based on `pageListing`.
+3. **Route "export"**: 
+   - This endpoint accepts a `PageListingModel` and a list of selected IDs (`List<int> selectedIds`) representing the specific users to be exported.
+   - The `[FromBody]` attribute is used to specify that `selectedIds` should be parsed from the request body.
+   - The `ExportUserListing` method in the service layer should be capable of handling the additional parameter `selectedIds`.
+
+### Service Layer Modification:
+
+Ensure the `_userService.ExportUserListing` method in your service layer is updated to accept and process the `selectedIds` parameter:
+
+```csharp
+public class UserService
+{
+    public ExportData ExportUserListing(PageListingModel pageListing, List<int> selectedIds)
+    {
+        // Implement logic to export user data based on the provided pageListing and selectedIds.
+        // ...
+
+        return exportData;
+    }
+}
+```
+
+### Client-Side Example (JavaScript/AJAX):
+
+Here’s an example of how you might send a request to the `export` endpoint from the client side using JavaScript (assuming you are using AJAX):
+
+```javascript
+function exportSelectedUsers(pageListing, selectedIds) {
+    const data = {
+        pageListing: pageListing,
+        selectedIds: selectedIds
+    };
+
+    fetch('/export', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(exportData => {
+        // Handle the export data (e.g., initiate file download)
+        console.log(exportData);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+```
+
+This setup ensures that the export functionality works for the particular list of users selected by the client.
