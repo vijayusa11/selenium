@@ -1,0 +1,84 @@
+It seems like the issue lies within the logic of your `UpdateTicketStatus()` function. Specifically, the way you're handling the ticket IDs and the conditions for updating their status might be causing unexpected behavior.
+
+Let's refactor and debug the code to ensure that only the selected ticket's status is updated and that closing one ticket does not affect the others:
+
+```typescript
+UpdateTicketStatus() {
+    debugger;
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+        const selectedTickets = this.ticketRow.filter(ticket => ticket.selected);
+
+        selectedTickets.forEach(ticket => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update the same status. Please select another one.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach(selectedTicket => {
+            ticketIds.push(selectedTicket.TicketId.toString());
+        });
+    } else {
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote) {
+        this.toasterService.warning('Comment is required.');
+        return;
+    }
+
+    const ticketQueryStatus = {
+        TicketIds: ticketIds,
+        CreatedBy: Number(this.authorizationservice.getUserId()),
+        CreatedDate: new Date(),
+        Notes: this.StatusNote,
+        TicketQueryStatusId: this.currentTicketStatus
+    };
+
+    console.log(ticketQueryStatus);
+
+    this.ticketservice.SaveTicketQueryStatus(ticketQueryStatus)
+        .pipe(finalize(() => {}))
+        .subscribe(
+            (result: ResponseModelDto<any>) => {
+                if (result.IsSuccess) {
+                    this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                    this.StatusNote = ''; // Resetting the status note
+                    this.closeModel(); // Close the modal
+                    this.getAllTicketListing(); // Refresh ticket listing if necessary
+                } else {
+                    this.toasterService.error(result.Message, 'Ticket');
+                }
+            },
+            (error) => {
+                console.error('Error updating ticket status:', error);
+                this.toasterService.error('An error occurred while updating ticket status.', 'Ticket');
+            }
+        );
+}
+```
+
+### Explanation:
+
+1. **Bulk Operation Handling:**
+   - The function checks if it's a bulk operation or a single ticket update. If it's a bulk operation, it iterates over the selected tickets to gather their IDs.
+   - It checks if the current status matches any of the selected ticket's current status. If so, it sets `validationStatus` to true, indicating an error condition.
+
+2. **Validation:**
+   - If `validationStatus` is true, it displays a warning message and returns without further processing.
+
+3. **Ticket Status Update:**
+   - For each selected ticket, it adds its ID to the `ticketIds` array.
+   - It checks if a comment is provided (`this.StatusNote`). If not, it displays a warning message and returns without further processing.
+   - It constructs the `ticketQueryStatus` object with all the necessary information.
+   - It calls the `SaveTicketQueryStatus()` method to update the ticket status.
+   - Upon success, it displays a success message, resets the `StatusNote`, closes the modal, and refreshes the ticket listing if necessary.
+
+This should resolve the issue where closing one ticket affects others and ensure that only the selected ticket's status is updated.
