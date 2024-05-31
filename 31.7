@@ -1,0 +1,87 @@
+It seems that the problem is occurring because the click event on the span is interfering with the accordion's default behavior. To fix this, we need to avoid manually managing the panel state and let `ngb-accordion` handle it.
+
+Let's simplify the approach by directly using the built-in `ngb-accordion` functionality:
+
+### HTML (`viewfaq.component.html`):
+
+```html
+<div class="row">
+    <div class="col-lg-12 col-md-12">
+        <div class="card mb-e page-body-min-height">
+            <div class="card-body">
+                <ngb-accordion #acc="ngbAccordion" [(activeIds)]="activeIds">
+                    <ngb-panel *ngFor="let faq of faqs" [id]="faq.FaqId" class="card mt-2">
+                        <ng-template ngbPanelTitle>
+                            {{faq.FaqSubject}}
+                            <span class="float-right">
+                                <i class="fe" [ngClass]="{'fe-chevron-down': isOpen(faq.FaqId), 'fe-chevron-right': !isOpen(faq.FaqId)}"></i>
+                            </span>
+                        </ng-template>
+                        <ng-template ngbPanelContent>
+                            <div [innerHTML]="faq.FaqBody" class="faq-body-content"></div>
+                        </ng-template>
+                    </ngb-panel>
+                </ngb-accordion>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+### TypeScript (`viewfaq.component.ts`):
+
+```typescript
+import { Component, OnInit } from '@angular/core';
+import { Title } from '@angular/platform-browser';
+import { finalize } from 'rxjs/operators';
+import { ResponseModelDto } from 'src/app/shared/data/common/responsemodeldto';
+import { FAQDto } from '../../masters/faq/data/faqdto';
+import { ViewFaqService } from '../view-faq.service';
+
+@Component({
+  selector: 'app-view-faq',
+  templateUrl: './view-faq.component.html',
+  styleUrls: ['./view-faq.component.scss']
+})
+export class ViewFaqComponent implements OnInit {
+  faqs: FAQDto[] = [];
+  activeIds: string[] = [];
+
+  constructor(
+    private viewFaqService: ViewFaqService,
+    private title: Title
+  ) {
+    this.title.setTitle('View FAQ RG Contractor Portal');
+  }
+
+  ngOnInit(): void {
+    this.viewFaqService.getAllFaqDetail()
+      .pipe(finalize(() => { }))
+      .subscribe(
+        (response: ResponseModelDto<FAQDto[]>) => {
+          this.faqs = response.ResponseDto;
+        },
+        (error) => {
+          console.error('Error fetching FAQs:', error);
+        }
+      );
+  }
+
+  isOpen(id: string): boolean {
+    return this.activeIds.includes(id);
+  }
+}
+```
+
+### Explanation:
+
+1. **HTML:**
+   - Added `[(activeIds)]="activeIds"` to the `ngb-accordion` to bind the active panel IDs directly with Angular's two-way binding. This allows the `ngb-accordion` to handle the state of which panels are open.
+   - Removed the manual `togglePanel` function call from the span's click event.
+   - Kept the dynamic icon logic for visual indication of the panel's state.
+
+2. **TypeScript:**
+   - The `activeIds` array is managed by `ngb-accordion` via two-way binding.
+   - The `isOpen` method is used to check if a panel is currently open, which is used to toggle the icon class in the HTML.
+
+This setup leverages the built-in state management of `ngb-accordion`, ensuring panels can be opened and closed independently without manually interfering with the toggle logic.
