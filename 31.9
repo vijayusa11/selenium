@@ -1,0 +1,82 @@
+It seems there are some syntax and naming issues in your code. Let's address them:
+
+1. **Syntax Issues:**
+   - There are some typos and incorrect syntax in your code, such as missing semicolons and incorrect usage of arrow functions.
+   - We'll correct these syntax errors to ensure the code runs smoothly.
+
+2. **Naming Issues:**
+   - The error indicates that `getUserid` does not exist on the `AuthorizationService`. It suggests using `getUserId`.
+   - The object being passed as an argument is missing properties or has incorrect property names. We'll correct these to match the expected properties.
+
+Here's the corrected code:
+
+```typescript
+UpdateTicketStatus() {
+    debugger;
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+        const selectedTickets = this.ticketRow.filter(ticket => ticket.IsSelected);
+
+        selectedTickets.forEach(ticket => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update the same status. Please select another one.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach(selectedTicket => {
+            ticketIds.push(selectedTicket.TicketId.toString());
+        });
+    } else {
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    const ticketQueryStatus = {
+        TicketIds: ticketIds,
+        CreatedBy: Number(this.authorizationService.getUserId()),
+        CreatedDate: new Date(),
+        Notes: this.StatusNote,
+        TicketQueryStatusid: this.currentTicketStatus
+    };
+
+    console.log(ticketQueryStatus);
+
+    this.ticketservice.SaveTicketQueryStatus(ticketQueryStatus)
+        .pipe(finalize(() => {}))
+        .subscribe(
+            (result: ResponseModelDto<any>) => {
+                if (result.IsSuccess) {
+                    this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                    this.StatusNote = ''; // Resetting the status note
+                    this.closeModel(); // Close the modal
+                    this.getAllTicketListing(); // Refresh ticket listing if necessary
+                } else {
+                    this.toasterService.error(result.Message, 'Ticket');
+                }
+            },
+            (error) => {
+                console.error('Error updating ticket status:', error);
+                this.toasterService.error('An error occurred while updating ticket status.', 'Ticket');
+            }
+        );
+}
+```
+
+### Explanation:
+
+- Fixed syntax errors such as missing semicolons and corrected arrow function syntax.
+- Replaced `getUserid()` with `getUserId()` where appropriate.
+- Ensured that the object passed as an argument has the correct properties and naming.
+
+After applying these corrections, the errors should be resolved, and the function should run without issues. If you encounter any further problems, feel free to ask!
