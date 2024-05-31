@@ -1,0 +1,99 @@
+It seems there are several issues with the formatting and logic of your code, which may be causing the unexpected behavior. I'll address the following points:
+
+1. **Formatting and Syntax:**
+   - Fixing indentation and syntax errors for better readability and functionality.
+
+2. **Logic for Handling Ticket Updates:**
+   - Ensuring that the ticket update logic is correct and does not interfere with other tickets.
+
+Here’s the corrected version of your `UpdateTicketStatus` function:
+
+```typescript
+UpdateTicketStatus() {
+    debugger;
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+        const selectedTickets = this.ticketRow.filter(ticket => ticket.IsSelected);
+
+        selectedTickets.forEach(ticket => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update the same status. Please select another one.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach(selectedTicket => {
+            ticketIds.push(selectedTicket.TicketId.toString());
+        });
+    } else {
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    const ticketQueryStatus = {
+        TicketIds: ticketIds,
+        CreatedBy: Number(this.authorizationService.getUserId()),
+        CreatedDate: new Date(),
+        Notes: this.StatusNote,
+        TicketQueryStatusid: this.currentTicketStatus
+    };
+
+    console.log(ticketQueryStatus);
+
+    this.ticketService.SaveTicketQueryStatus(ticketQueryStatus)
+        .pipe(finalize(() => {}))
+        .subscribe(
+            (result: ResponseModelDto<any>) => {
+                if (result.IsSuccess) {
+                    this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                    this.StatusNote = ''; // Resetting the status note
+                    this.closeModel(); // Close the modal
+                    this.getAllTicketListing(); // Refresh ticket listing if necessary
+                } else {
+                    this.toasterService.error(result.Message, 'Ticket');
+                }
+            },
+            (error) => {
+                console.error('Error updating ticket status:', error);
+                this.toasterService.error('An error occurred while updating ticket status.', 'Ticket');
+            }
+        );
+}
+```
+
+### Explanation:
+
+1. **Variable Declaration:**
+   - Declared `ticketIds` as an array of strings.
+
+2. **Bulk Operation Handling:**
+   - Checked if `isBulkOperation` is true.
+   - Filtered `ticketRow` to get the selected tickets.
+   - Checked if any selected ticket has the same status as `currentTicketStatus`. If so, set `validationStatus` to true and show a warning message, then return.
+   - Added the IDs of the selected tickets to the `ticketIds` array.
+
+3. **Single Ticket Handling:**
+   - If not a bulk operation, added the current ticket's ID to `ticketIds`.
+
+4. **Status Note Validation:**
+   - Checked if `StatusNote` is not provided. If not, showed a warning message and returned.
+
+5. **Ticket Query Status Object:**
+   - Created an object `ticketQueryStatus` with the necessary properties.
+
+6. **API Call:**
+   - Called `SaveTicketQueryStatus` with the `ticketQueryStatus` object.
+   - Handled the response and error appropriately, showing success or error messages as needed.
+   - Reset the status note, closed the modal, and refreshed the ticket listing upon success.
+
+Make sure that your service methods and variable names are correct and that the logic accurately reflects your requirements. If this still doesn't solve the issue, please provide more details or specific error messages you encounter, and I'll help you debug further.
