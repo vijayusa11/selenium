@@ -1,0 +1,95 @@
+To ensure the FAQ panels toggle correctly without opening all of them simultaneously, we need to ensure that the panel state is managed properly. Let's revisit the code and ensure the toggle logic is correct.
+
+### HTML (`viewfaq.component.html`):
+
+```html
+<div class="row">
+    <div class="col-lg-12 col-md-12">
+        <div class="card mb-e page-body-min-height">
+            <div class="card-body">
+                <ngb-accordion [activeIds]="activeIds">
+                    <ngb-panel *ngFor="let faq of faqs" [id]="faq.FaqId" class="card mt-2">
+                        <ng-template ngbPanelTitle>
+                            {{faq.FaqSubject}}
+                            <span class="float-right" (click)="togglePanel(faq.FaqId, $event)">
+                                <i class="fe" [ngClass]="{'fe-chevron-down': isOpen(faq.FaqId), 'fe-chevron-right': !isOpen(faq.FaqId)}"></i>
+                            </span>
+                        </ng-template>
+                        <ng-template ngbPanelContent>
+                            <div [innerHTML]="faq.FaqBody" class="faq-body-content"></div>
+                        </ng-template>
+                    </ngb-panel>
+                </ngb-accordion>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+### TypeScript (`viewfaq.component.ts`):
+
+```typescript
+import { Component, OnInit } from '@angular/core';
+import { Title } from '@angular/platform-browser';
+import { finalize } from 'rxjs/operators';
+import { ResponseModelDto } from 'src/app/shared/data/common/responsemodeldto';
+import { FAQDto } from '../../masters/faq/data/faqdto';
+import { ViewFaqService } from '../view-faq.service';
+
+@Component({
+  selector: 'app-view-faq',
+  templateUrl: './view-faq.component.html',
+  styleUrls: ['./view-faq.component.scss']
+})
+export class ViewFaqComponent implements OnInit {
+  faqs: FAQDto[] = [];
+  activeIds: string[] = [];
+
+  constructor(
+    private viewFaqService: ViewFaqService,
+    private title: Title
+  ) {
+    this.title.setTitle('View FAQ RG Contractor Portal');
+  }
+
+  ngOnInit(): void {
+    this.viewFaqService.getAllFaqDetail()
+      .pipe(finalize(() => { }))
+      .subscribe(
+        (response: ResponseModelDto<FAQDto[]>) => {
+          this.faqs = response.ResponseDto;
+        },
+        (error) => {
+          console.error('Error fetching FAQs:', error);
+        }
+      );
+  }
+
+  togglePanel(id: string, event: MouseEvent): void {
+    event.stopPropagation(); // Prevent event from bubbling up to accordion
+    const index = this.activeIds.indexOf(id);
+    if (index > -1) {
+      this.activeIds.splice(index, 1); // Close the panel
+    } else {
+      this.activeIds.push(id); // Open the panel
+    }
+  }
+
+  isOpen(id: string): boolean {
+    return this.activeIds.includes(id);
+  }
+}
+```
+
+### Explanation:
+
+1. **HTML:**
+   - Added `[activeIds]="activeIds"` to the `ngb-accordion` to bind the active panel IDs.
+   - The click event on the span now calls `togglePanel(faq.FaqId, $event)`.
+   - The icon changes dynamically based on the open state using `[ngClass]`.
+
+2. **TypeScript:**
+   - The `togglePanel` method handles adding or removing the panel ID from the `activeIds` array and uses `event.stopPropagation()` to prevent the click event from interfering with the default behavior of `ngb-accordion`.
+   - The `isOpen` method checks if a panel is currently open by verifying if its ID is in the `activeIds` array.
+
+This setup should ensure that each FAQ panel can be toggled independently. If this does not solve the issue, please ensure there are no CSS or additional JavaScript conflicts that might be interfering with the functionality.
