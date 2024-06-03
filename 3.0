@@ -1,0 +1,83 @@
+Your code appears to have a few issues related to syntax, logic, and formatting. Let's address them step by step and provide a revised version that should fix the issues you've described.
+
+### Issues:
+1. **Syntax Errors**: Several lines have syntax errors, such as missing parentheses, misplaced colons, and incorrect variable names.
+2. **Logic Errors**: The logic seems to be incorrectly handling the bulk operation vs. single ticket operation.
+3. **Formatting**: Indentation and code structure need improvement for better readability.
+
+### Corrected Code:
+```javascript
+UpdateTicketStatus() {
+    let ticketIds = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+
+        const selectedTickets = this.ticketRow.filter(t => t.IsSelected);
+        selectedTickets.forEach(ticket => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach(ticket => {
+            ticketIds.push(ticket.TicketId.toString());
+        });
+    } else {
+        if (this.currentTicketStatus === this.ticket.StatusId) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote || this.StatusNote === undefined) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    const ticketQueryStatus = {
+        TicketId: ticketIds,
+        CreatedBy: Number(this.authorizationService.tokenDecoder().UserId),
+        CreatedDate: new Date(),
+        TicketQueryStatusDetailId: 0,
+        Notes: this.StatusNote,
+        TicketQueryStatusId: this.currentTicketStatus
+    };
+
+    console.log(ticketQueryStatus);
+
+    this.ticketService.SaveTicketQueryStatus(ticketQueryStatus)
+        .pipe(finalize(() => {
+            // Finalize logic here if any
+        }))
+        .subscribe((result: ResponseModelDto<boolean>) => {
+            if (!result.IsSuccess) {
+                this.toasterService.error(result.Message, 'Ticket');
+            } else {
+                this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                this.StatusNote = '';
+                this.closeModel();
+                this.getAllTicketListing();
+            }
+        }, (error) => {
+            this.toasterService.error('An error occurred while updating the ticket status.', 'Ticket');
+        });
+}
+```
+
+### Explanation of Changes:
+1. **Variable Initialization**: `let ticketIds = [];` is initialized properly.
+2. **Bulk Operation Check**: Corrected the `if` statement to check `this.isBulkOperation` and ensured the logic inside handles validation and error messaging correctly.
+3. **Single Ticket Handling**: Added proper logic for handling single ticket status change.
+4. **Validation for Status Note**: Checked if `StatusNote` is provided and displayed an error if not.
+5. **Ticket Query Status Object**: Created the `ticketQueryStatus` object correctly with all required properties.
+6. **Subscription Handling**: Improved the subscription to handle success and error cases.
+
+This corrected version should address your issues with updating the status of multiple tickets vs. a single ticket and ensure proper validation and error handling.
