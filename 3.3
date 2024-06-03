@@ -1,0 +1,149 @@
+The error "Type 'string[]' is not assignable to type 'string'" indicates that `TicketId` in `ticketQueryStatus` is expected to be a `string` but you're providing an array of strings. This suggests that `ticketQueryStatus` might not be structured correctly for bulk operations. To fix this, you need to adjust the data structure to handle bulk updates appropriately.
+
+Assuming the `TicketQueryStatusDto` is designed to handle a single ticket, you will need to create multiple such objects for bulk updates. Here’s an updated approach:
+
+### Updated Code:
+```typescript
+UpdateTicketStatus() {
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+
+        const selectedTickets = this.ticketRow.filter((t: any) => t.IsSelected);
+        selectedTickets.forEach((ticket: any) => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach((ticket: any) => {
+            ticketIds.push(ticket.TicketId.toString());
+        });
+    } else {
+        if (this.currentTicketStatus === this.ticket.StatusId) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote || this.StatusNote === undefined) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    // Creating multiple TicketQueryStatusDto objects for bulk updates
+    const ticketQueryStatusList = ticketIds.map(id => ({
+        TicketId: id,
+        CreatedBy: Number(this.authorizationService.tokenDecoder().UserId),
+        CreatedDate: new Date(),
+        TicketQueryStatusDetailId: 0,
+        Notes: this.StatusNote,
+        TicketQueryStatusId: this.currentTicketStatus
+    }));
+
+    console.log(ticketQueryStatusList);
+
+    // Assuming SaveTicketQueryStatus can handle an array of TicketQueryStatusDto objects
+    this.ticketService.SaveTicketQueryStatus(ticketQueryStatusList)
+        .pipe(finalize(() => {
+            // Finalize logic here if any
+        }))
+        .subscribe((result: ResponseModelDto<boolean>) => {
+            if (!result.IsSuccess) {
+                this.toasterService.error(result.Message, 'Ticket');
+            } else {
+                this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                this.StatusNote = '';
+                this.closeModel();
+                this.getAllTicketListing();
+            }
+        }, (error) => {
+            this.toasterService.error('An error occurred while updating the ticket status.', 'Ticket');
+        });
+}
+```
+
+### Explanation:
+1. **Create Multiple DTOs for Bulk Update**: Instead of a single `ticketQueryStatus`, create an array of `ticketQueryStatusList` objects, one for each ticket ID.
+2. **Assuming Bulk Save Method**: This example assumes that `SaveTicketQueryStatus` can handle an array of `TicketQueryStatusDto` objects. If it cannot, you might need to adjust the backend or make individual requests for each ticket.
+
+If the `SaveTicketQueryStatus` method cannot handle an array, you could iterate through `ticketQueryStatusList` and make individual save requests for each ticket. Here’s how to do that:
+
+### Individual Save Requests:
+```typescript
+UpdateTicketStatus() {
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+
+        const selectedTickets = this.ticketRow.filter((t: any) => t.IsSelected);
+        selectedTickets.forEach((ticket: any) => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach((ticket: any) => {
+            ticketIds.push(ticket.TicketId.toString());
+        });
+    } else {
+        if (this.currentTicketStatus === this.ticket.StatusId) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote || this.StatusNote === undefined) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    const ticketQueryStatusList = ticketIds.map(id => ({
+        TicketId: id,
+        CreatedBy: Number(this.authorizationService.tokenDecoder().UserId),
+        CreatedDate: new Date(),
+        TicketQueryStatusDetailId: 0,
+        Notes: this.StatusNote,
+        TicketQueryStatusId: this.currentTicketStatus
+    }));
+
+    console.log(ticketQueryStatusList);
+
+    ticketQueryStatusList.forEach(ticketQueryStatus => {
+        this.ticketService.SaveTicketQueryStatus(ticketQueryStatus)
+            .pipe(finalize(() => {
+                // Finalize logic here if any
+            }))
+            .subscribe((result: ResponseModelDto<boolean>) => {
+                if (!result.IsSuccess) {
+                    this.toasterService.error(result.Message, 'Ticket');
+                } else {
+                    this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                    this.StatusNote = '';
+                    this.closeModel();
+                    this.getAllTicketListing();
+                }
+            }, (error) => {
+                this.toasterService.error('An error occurred while updating the ticket status.', 'Ticket');
+            });
+    });
+}
+```
+
+This approach ensures each ticket update is handled separately, preventing type mismatches and ensuring each status update is processed correctly.
