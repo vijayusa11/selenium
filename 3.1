@@ -1,0 +1,73 @@
+The issue you're encountering, "Argument of type 'string' is not assignable to parameter of type 'never'," typically arises when TypeScript's type inference system is unable to correctly infer the type of a variable or an array. In this case, it seems to be related to the `ticketIds` array.
+
+To fix these type errors, you need to explicitly define the types for your variables and ensure that the array `ticketIds` is correctly typed.
+
+### Updated Code with Explicit Types:
+```typescript
+UpdateTicketStatus() {
+    let ticketIds: string[] = [];
+
+    if (this.isBulkOperation) {
+        let validationStatus = false;
+
+        const selectedTickets = this.ticketRow.filter((t: any) => t.IsSelected);
+        selectedTickets.forEach((ticket: any) => {
+            if (this.currentTicketStatus === ticket.QueryStatusId) {
+                validationStatus = true;
+            }
+        });
+
+        if (validationStatus) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        selectedTickets.forEach((ticket: any) => {
+            ticketIds.push(ticket.TicketId.toString());
+        });
+    } else {
+        if (this.currentTicketStatus === this.ticket.StatusId) {
+            this.toasterService.warning('You cannot update to the same status, please select another status.', 'Ticket');
+            return;
+        }
+
+        ticketIds.push(this.ticket.TicketId.toString());
+    }
+
+    if (!this.StatusNote || this.StatusNote === undefined) {
+        this.toasterService.warning('Comment is required.', 'Ticket');
+        return;
+    }
+
+    const ticketQueryStatus: TicketQueryStatusDto = {
+        TicketId: ticketIds,
+        CreatedBy: Number(this.authorizationService.tokenDecoder().UserId),
+        CreatedDate: new Date(),
+        TicketQueryStatusDetailId: 0,
+        Notes: this.StatusNote,
+        TicketQueryStatusId: this.currentTicketStatus
+    };
+
+    console.log(ticketQueryStatus);
+
+    this.ticketService.SaveTicketQueryStatus(ticketQueryStatus)
+        .pipe(finalize(() => {
+            // Finalize logic here if any
+        }))
+        .subscribe((result: ResponseModelDto<boolean>) => {
+            if (!result.IsSuccess) {
+                this.toasterService.error(result.Message, 'Ticket');
+            } else {
+                this.toasterService.success('Ticket status updated successfully', 'Ticket');
+                this.StatusNote = '';
+                this.closeModel();
+                this.getAllTicketListing();
+            }
+        }, (error) => {
+            this.toasterService.error('An error occurred while updating the ticket status.', 'Ticket');
+        });
+}
+```
+
+### Explanation of Changes:
+1. **Explicitly Typed `ticketIds` Array**: Changed `let ticketIds = [];` to `let ticketIds: string[] = [];` to ensure Type
