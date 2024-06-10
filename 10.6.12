@@ -1,0 +1,113 @@
+To address issues in the provided code snippet, I'll rewrite it with proper syntax and logical flow. There are several areas that need attention including fixing syntax errors, ensuring proper variable initialization, and adding missing logic. Here is the corrected version of the code:
+
+```csharp
+private static void SendAllPendingEmail(GeneralConfiguration generalConfiguration)
+{
+    using (var contractorPortalEntities = new ContractorPortalEntities())
+    {
+        var pendingEmails = contractorPortalEntities.GetPendingEmailNotes().ToList();
+        
+        if (pendingEmails != null && pendingEmails.Count > 0)
+        {
+            foreach (var pendingEmail in pendingEmails)
+            {
+                var emailNoteAttachments = contractorPortalEntities.GetEmailNoteAttachments(pendingEmail.EmailNoteId).ToList();
+                var attachments = new List<Attachment>();
+
+                if (emailNoteAttachments != null && emailNoteAttachments.Count > 0)
+                {
+                    foreach (var emailNoteAttachment in emailNoteAttachments)
+                    {
+                        attachments.Add(new Attachment
+                        {
+                            FileName = emailNoteAttachment.FileName,
+                            FilePath = Path.Combine(Decrypt(ConfigurationManager.AppSettings["BasePath"]), emailNoteAttachment.FilePath.Remove(0, 2)),
+                            RawPath = emailNoteAttachment.FilePath
+                        });
+                    }
+                }
+
+                var sendMailModel = new SendMailModel
+                {
+                    FromEmail = Decrypt(generalConfiguration.FromEmailAddress),
+                    ToEmail = pendingEmail.ToEmail,
+                    CcEmail = pendingEmail.CcEmail,
+                    SenderDisplayName = "RG Contractor Portal",
+                    Subject = pendingEmail.Subject,
+                    Body = pendingEmail.Body,
+                    ApiUrl = Decrypt(generalConfiguration.APIUrl),
+                    EmailLogo = Decrypt(generalConfiguration.EmailLogo),
+                    WebUrl = Decrypt(generalConfiguration.WebUrl),
+                    SmtpServer = Decrypt(generalConfiguration.SMTPServer),
+                    SmtpUserName = Decrypt(generalConfiguration.SMTPUserName),
+                    SmtpPassword = Decrypt(generalConfiguration.SMTPPassword),
+                    SmtpPort = Decrypt(generalConfiguration.SMTPPort),
+                    Attachments = attachments,
+                    EmailNoteId = pendingEmail.EmailNoteId
+                };
+
+                if (SendMail(sendMailModel))
+                {
+                    contractorPortalEntities.UpdateEmailNoteStatus(pendingEmail.EmailNoteId, (short)EmailStatus.Sent, null, null, null);
+                }
+            }
+        }
+    }
+}
+
+private static string Decrypt(string encryptedString)
+{
+    // Implement your decryption logic here
+    return encryptedString; // Placeholder
+}
+
+private static bool SendMail(SendMailModel sendMailModel)
+{
+    // Implement your email sending logic here
+    return true; // Placeholder
+}
+
+public class SendMailModel
+{
+    public string FromEmail { get; set; }
+    public string ToEmail { get; set; }
+    public string CcEmail { get; set; }
+    public string SenderDisplayName { get; set; }
+    public string Subject { get; set; }
+    public string Body { get; set; }
+    public string ApiUrl { get; set; }
+    public string EmailLogo { get; set; }
+    public string WebUrl { get; set; }
+    public string SmtpServer { get; set; }
+    public string SmtpUserName { get; set; }
+    public string SmtpPassword { get; set; }
+    public string SmtpPort { get; set; }
+    public List<Attachment> Attachments { get; set; }
+    public int EmailNoteId { get; set; }
+}
+
+public class Attachment
+{
+    public string FileName { get; set; }
+    public string FilePath { get; set; }
+    public string RawPath { get; set; }
+}
+
+public enum EmailStatus
+{
+    Pending,
+    Sent,
+    Failed
+}
+
+// Assuming GeneralConfiguration, ContractorPortalEntities, etc., are defined elsewhere
+```
+
+### Key Improvements:
+1. **Syntax Corrections**: Fixed all syntax errors including missing semicolons and incorrect method/variable names.
+2. **Null Checks**: Added null checks to ensure the code does not throw exceptions when lists or configurations are missing.
+3. **Logical Flow**: Organized the logical flow to ensure that attachments and emails are processed correctly.
+4. **Utility Methods**: Added placeholder methods for `Decrypt` and `SendMail` for clarity. You should replace these with actual implementations.
+5. **Model Definitions**: Defined `SendMailModel` and `Attachment` classes to encapsulate email details and attachments.
+
+Make sure that the `Decrypt` and `SendMail` methods are implemented according to your specific requirements.
