@@ -1,0 +1,226 @@
+Sure, let's separate the Azure upload and local folder logic into distinct `if-else` blocks. This will make it clear and ensure that the logic for each storage method is handled independently.
+
+Here is the updated code with distinct blocks for Azure and local storage:
+
+```csharp
+public ResponseModel<bool> SaveContractorEmailNote(HttpRequest emailNoteRequest)
+{
+    try
+    {
+        var generalConfiguration = _commonService.GetGeneralConfiguration();
+        List<Attachments> sendAttachment = new List<Attachments>();
+        EmailNoteDto emailNote = new EmailNoteDto()
+        {
+            EmailNoteId = 0,
+            ContractorId = Convert.ToInt32(emailNoteRequest["ContractorId"].ToString()),
+            Subject = emailNoteRequest["Subject"].ToString(),
+            Body = emailNoteRequest.Unvalidated["Body"].ToString(),
+            FromEmail = emailNoteRequest["FromEmail"].ToString(),
+            ToEmail = emailNoteRequest["ToEmail"].ToString(),
+            CCEmail = emailNoteRequest["CCEmail"].ToString() == "null" ? "" : emailNoteRequest["CCEmail"].ToString(),
+            EmailStatusId = Convert.ToInt16(EmailStatus.Pending),
+            Excepton = "",
+            InnerException = "",
+            StackTrace = "",
+            CreatedDate = DateTime.Now,
+            NoteId = 0,
+            ContractorSubject = emailNoteRequest["Subject"].ToString(),
+            Note = emailNoteRequest.Unvalidated["Body"].ToString(),
+            CreatedBy = _commonService.GetUserId(),
+            PhoneNoteId = 0,
+            MannualNoteId = 0,
+            NoteTypeId = Convert.ToInt16(NoteType.EmailNote),
+        };
+
+        Int64 emailNoteId = _contractorRepository.SaveContractorEmailNote(emailNote);
+        if (emailNoteId <= 0)
+        {
+            return _commonService.ReturnResponse(false, false, "Failed to save email note.");
+        }
+
+        string azureAttachmentSetting = ConfigurationManager.AppSettings["Azure_Attachment"];
+        if (azureAttachmentSetting == "1")
+        {
+            // Azure upload logic
+            if (emailNoteRequest.Files.Count > 0)
+            {
+                foreach (string fileKey in emailNoteRequest.Files)
+                {
+                    HttpPostedFile attachmentFile = emailNoteRequest.Files[fileKey];
+                    if (attachmentFile != null)
+                    {
+                        // Azure attachment code
+                        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                        string azurePath = "UploadedFiles/" + _commonService.GetUserId().ToString();
+                        AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                        {
+                            ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                            FileName = attachmentFile.FileName,
+                            SavePath = azurePath,
+                            FileBytes = ConvertStreamToByteArray(attachmentFile.InputStream)
+                        };
+                        bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+                        sendAttachment.Add(new Attachments()
+                        {
+                            FileName = attachmentFile.FileName,
+                            FilePath = azurePath + "/" + attachmentFile.FileName
+                        });
+
+                        SaveEmailNoteAttachment(emailNoteId, attachmentFile.FileName, azurePath + "/" + attachmentFile.FileName);
+                    }
+                }
+            }
+
+            string attachmentIds = emailNoteRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                Int16 templateId = Convert.ToInt16(emailNoteRequest["TemplateId"].ToString());
+                var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+                string[] arr = attachmentIds.Split(',');
+
+                foreach (var item in arr)
+                {
+                    var templateAttachment = templateAttachments.Find(t => t.TemplateAttachmentId == Convert.ToInt16(item));
+                    if (templateAttachment != null)
+                    {
+                        // Azure attachment code
+                        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                        string azurePath = "UploadedFiles/" + _commonService.GetUserId().ToString();
+                        AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                        {
+                            ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                            FileName = templateAttachment.FileName,
+                            SavePath = azurePath,
+                            FileBytes = bLAzureCommonAPI.ConvertFilePathToByte(HttpContext.Current.Server.MapPath(templateAttachment.FilePath), true)
+                        };
+                        bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+                        sendAttachment.Add(new Attachments()
+                        {
+                            FileName = templateAttachment.FileName,
+                            FilePath = azurePath + "/" + templateAttachment.FileName
+                        });
+
+                        SaveEmailNoteAttachment(emailNoteId, templateAttachment.FileName, azurePath + "/" + templateAttachment.FileName);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Local storage logic
+            if (emailNoteRequest.Files.Count > 0)
+            {
+                foreach (string fileKey in emailNoteRequest.Files)
+                {
+                    HttpPostedFile attachmentFile = emailNoteRequest.Files[fileKey];
+                    if (attachmentFile != null)
+                    {
+                        string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                        string filePath = "~//Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+
+                        EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+                        {
+                            EmailNoteAttachmentId = 0,
+                            EmailNoteId = emailNoteId,
+                            FileName = attachmentFile.FileName,
+                            FilePath = filePath
+                        };
+                        Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+                        var folderPath = HttpContext.Current.Server.MapPath(filePath + attachmentId.ToString());
+                        CreateFolderIfNeeded(folderPath);
+                        attachmentFile.SaveAs(Path.Combine(folderPath, attachmentFile.FileName));
+                        sendAttachment.Add(new Attachments()
+                        {
+                            FileName = attachmentFile.FileName,
+                            FilePath = Path.Combine(folderPath, attachmentFile.FileName)
+                        });
+                    }
+                }
+            }
+
+            string attachmentIds = emailNoteRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                Int16 templateId = Convert.ToInt16(emailNoteRequest["TemplateId"].ToString());
+                var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+                string[] arr = attachmentIds.Split(',');
+
+                foreach (var item in arr)
+                {
+                    var templateAttachment = templateAttachments.Find(t => t.TemplateAttachmentId == Convert.ToInt16(item));
+                    if (templateAttachment != null)
+                    {
+                        string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                        string filePath = "~//Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+
+                        EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+                        {
+                            EmailNoteAttachmentId = 0,
+                            EmailNoteId = emailNoteId,
+                            FileName = templateAttachment.FileName,
+                            FilePath = filePath
+                        };
+                        Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+                        var folderPath = HttpContext.Current.Server.MapPath(filePath + attachmentId.ToString());
+                        CreateFolderIfNeeded(folderPath);
+
+                        if (File.Exists(HttpContext.Current.Server.MapPath(templateAttachment.FilePath)))
+                        {
+                            System.IO.File.Copy(HttpContext.Current.Server.MapPath(templateAttachment.FilePath), Path.Combine(folderPath, templateAttachment.FileName), true);
+                            sendAttachment.Add(new Attachments()
+                            {
+                                FileName = templateAttachment.FileName,
+                                FilePath = Path.Combine(folderPath, templateAttachment.FileName)
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        return _commonService.ReturnResponse(true, true, "Email sent successfully.");
+    }
+    catch (Exception ex)
+    {
+        return _commonService.ReturnResponse(false, false, "Error occurred: " + ex.Message);
+    }
+}
+
+private void SaveEmailNoteAttachment(long emailNoteId, string fileName, string filePath)
+{
+    EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+    {
+        EmailNoteAttachmentId = 0,
+        EmailNoteId = emailNoteId,
+        FileName = fileName,
+        FilePath = filePath
+    };
+    _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+}
+
+private byte[] ConvertStreamToByteArray(Stream inputStream)
+{
+    using (MemoryStream memoryStream = new MemoryStream())
+    {
+        inputStream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
+    }
+}
+
+private void CreateFolderIfNeeded(string path)
+{
+    if (!Directory.Exists(path))
+    {
+        Directory.CreateDirectory(path);
+    }
+}
+```
+
+### Key Changes:
+
+1. **Separate Logic Blocks**:
+   - Added an
