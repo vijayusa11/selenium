@@ -1,0 +1,36 @@
+Apologies for the oversight. Let's define the `ConvertStreamToByteArray` method directly within the `SaveContractorEmailNote` method to resolve this issue:
+
+```csharp
+public ResponseModel<bool> SaveContractorEmailNote(HttpRequest emailNoteRequest)
+{
+    var generalConfiguration = _commonService.GetGeneralConfiguration();
+    List<Attachments> sendAttachment = new List<Attachments>();
+
+    // Define ConvertStreamToByteArray method
+    byte[] ConvertStreamToByteArray(Stream inputStream)
+    {
+        using (MemoryStream memoryStream = new MemoryStream())
+        {
+            inputStream.CopyTo(memoryStream);
+            return memoryStream.ToArray();
+        }
+    }
+
+    // Rest of the method remains unchanged
+    EmailNoteDto emailNote = new EmailNoteDto()
+    {
+        // emailNote initialization code...
+    };
+
+    Int64 emailNoteId = _contractorRepository.SaveContractorEmailNote(emailNote);
+
+    if (emailNoteId > 0)
+    {
+        // File attachment handling code...
+    }
+
+    return _commonService.ReturnResponse(true, true, "Email sent successfully.");
+}
+```
+
+By defining the `ConvertStreamToByteArray` method directly within the `SaveContractorEmailNote` method, it becomes accessible within the method scope, resolving the "does not exist in current context" error.
