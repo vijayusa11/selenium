@@ -1,0 +1,53 @@
+private static void SendAllPendingMails(GeneralConfiguration generalConfiguration)
+{
+    using (RGContractorPortalEntities rGContractorPortalEntities = new RGContractorPortalEntities())
+    {
+        var pendingEmails = rGContractorPortalEntities.GetPendingEmailNotes().ToList();
+        if (pendingEmails != null && pendingEmails.Count > 0)
+        {
+            foreach (var pendingMail in pendingEmails)
+            {
+                var emailNoteAttacchments = rGContractorPortalEntities.GetEmailNoteAttachment(pendingMail.EmailNoteId).ToList();
+                List<Attachments> Attachments = new List<Attachments>();
+
+                if (emailNoteAttacchments != null && emailNoteAttacchments.Count > 0)
+                {
+                    foreach (var emailNoteAttachment in emailNoteAttacchments)
+                    {
+                        Attachments.Add(new Attachments()
+                        {
+                            FileName = emailNoteAttachment.FileName,
+                            FilePath = Decrypt(ConfigurationManager.AppSettings["BasePath"]) + emailNoteAttachment.FilePath.Remove(0, 2).ToString(),
+                            HalfPath = emailNoteAttachment.FilePath
+                        });
+                    }
+                }
+
+                SendMailModel sendMailModel = new SendMailModel()
+                {
+                    FromEmail = Decrypt(generalConfiguration.FromEmailAddress),
+                    ToEmail = pendingMail.ToEmail,
+                    CCEmail = pendingMail.CCEmail,
+                    SenderDisplayName = "RG Contractor Portal",
+                    Subject = pendingMail.Subject,
+                    Body = pendingMail.Body,
+                    ApiURL = Decrypt(generalConfiguration.APIUrl),
+                    EmailLogo = Decrypt(generalConfiguration.EmailLogo),
+                    WebURL = Decrypt(generalConfiguration.WebUrl),
+                    SMTPServer = Decrypt(generalConfiguration.SMTPServer),
+                    SMTPUserName = Decrypt(generalConfiguration.SMTPUserName),
+                    SMTPPassword = Decrypt(generalConfiguration.SMTPPassword),
+                    SMTPPort = Decrypt(generalConfiguration.SMTPPort),
+                    Attachments = Attachments,
+                    EmailNoteId = pendingMail.EmailNoteId
+                };
+                if (SendMail(sendMailModel) == true)
+                {
+                    rGContractorPortalEntities.UpdateEmailNoteStatus(pendingMail.EmailNoteId, (Int16)EmailStatus.Send, null, null, null);
+                }
+            }
+        }
+    }
+}
+
+email is not sending and EmailStatus.Send is not updating 
