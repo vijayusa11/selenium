@@ -1,0 +1,169 @@
+To troubleshoot the issue of emails not being sent and the `EmailStatus.Send` not updating, we need to examine a few key areas in the `SendAllPendingMails` method:
+
+1. **Email Sending Logic**: Ensure the `SendMail` method is correctly implemented and working.
+2. **Error Handling and Logging**: Add error handling and logging to capture any issues that occur during the process.
+3. **Database Update Logic**: Confirm that the `UpdateEmailNoteStatus` method is correctly implemented and committed to the database.
+
+Let's add logging to help debug and ensure the `SendMail` and `UpdateEmailNoteStatus` methods are correctly implemented. Here's an updated version with enhanced logging and error handling:
+
+### Updated `SendAllPendingMails` Method
+
+```csharp
+private static void SendAllPendingMails(GeneralConfiguration generalConfiguration)
+{
+    using (RGContractorPortalEntities rGContractorPortalEntities = new RGContractorPortalEntities())
+    {
+        try
+        {
+            var pendingEmails = rGContractorPortalEntities.GetPendingEmailNotes().ToList();
+            if (pendingEmails != null && pendingEmails.Count > 0)
+            {
+                foreach (var pendingMail in pendingEmails)
+                {
+                    try
+                    {
+                        var emailNoteAttacchments = rGContractorPortalEntities.GetEmailNoteAttachment(pendingMail.EmailNoteId).ToList();
+                        List<Attachments> attachments = new List<Attachments>();
+
+                        if (emailNoteAttacchments != null && emailNoteAttacchments.Count > 0)
+                        {
+                            foreach (var emailNoteAttachment in emailNoteAttacchments)
+                            {
+                                attachments.Add(new Attachments()
+                                {
+                                    FileName = emailNoteAttachment.FileName,
+                                    FilePath = Decrypt(ConfigurationManager.AppSettings["BasePath"]) + emailNoteAttachment.FilePath.Remove(0, 2).ToString(),
+                                    HalfPath = emailNoteAttachment.FilePath
+                                });
+                            }
+                        }
+
+                        SendMailModel sendMailModel = new SendMailModel()
+                        {
+                            FromEmail = Decrypt(generalConfiguration.FromEmailAddress),
+                            ToEmail = pendingMail.ToEmail,
+                            CCEmail = pendingMail.CCEmail,
+                            SenderDisplayName = "RG Contractor Portal",
+                            Subject = pendingMail.Subject,
+                            Body = pendingMail.Body,
+                            ApiURL = Decrypt(generalConfiguration.APIUrl),
+                            EmailLogo = Decrypt(generalConfiguration.EmailLogo),
+                            WebURL = Decrypt(generalConfiguration.WebUrl),
+                            SMTPServer = Decrypt(generalConfiguration.SMTPServer),
+                            SMTPUserName = Decrypt(generalConfiguration.SMTPUserName),
+                            SMTPPassword = Decrypt(generalConfiguration.SMTPPassword),
+                            SMTPPort = Decrypt(generalConfiguration.SMTPPort),
+                            Attachments = attachments,
+                            EmailNoteId = pendingMail.EmailNoteId
+                        };
+
+                        if (SendMail(sendMailModel))
+                        {
+                            rGContractorPortalEntities.UpdateEmailNoteStatus(pendingMail.EmailNoteId, (Int16)EmailStatus.Send, null, null, null);
+                        }
+                        else
+                        {
+                            LogError($"Failed to send email with EmailNoteId: {pendingMail.EmailNoteId}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Error processing email with EmailNoteId: {pendingMail.EmailNoteId}. Exception: {ex.Message}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError($"Error retrieving pending emails. Exception: {ex.Message}");
+        }
+    }
+}
+
+private static void LogError(string message)
+{
+    // Implement your logging mechanism here, e.g., log to a file, database, or external service
+    Console.WriteLine(message); // Placeholder for actual logging
+}
+```
+
+### Key Changes and Additions:
+
+1. **Error Handling**: Wrapped the main logic in try-catch blocks to handle and log exceptions.
+2. **Logging**: Added `LogError` method calls to log specific errors that occur during email processing and sending.
+3. **Validation of `SendMail` Return Value**: Check if `SendMail` returns `false` and log an error message accordingly.
+4. **General Exception Logging**: Added a general exception handler to log any errors that occur while retrieving pending emails.
+
+### Implementation of `SendMail` Method
+
+Ensure that the `SendMail` method is correctly implemented and returns `true` or `false` based on the success of the email sending process. Here's a basic implementation outline:
+
+```csharp
+private static bool SendMail(SendMailModel sendMailModel)
+{
+    try
+    {
+        // Implement the actual email sending logic here using SMTP or an email service API
+        // For example, using System.Net.Mail:
+
+        var smtpClient = new SmtpClient(sendMailModel.SMTPServer)
+        {
+            Port = int.Parse(sendMailModel.SMTPPort),
+            Credentials = new NetworkCredential(sendMailModel.SMTPUserName, sendMailModel.SMTPPassword),
+            EnableSsl = true,
+        };
+
+        var mailMessage = new MailMessage
+        {
+            From = new MailAddress(sendMailModel.FromEmail, sendMailModel.SenderDisplayName),
+            Subject = sendMailModel.Subject,
+            Body = sendMailModel.Body,
+            IsBodyHtml = true,
+        };
+
+        mailMessage.To.Add(sendMailModel.ToEmail);
+        if (!string.IsNullOrEmpty(sendMailModel.CCEmail))
+        {
+            mailMessage.CC.Add(sendMailModel.CCEmail);
+        }
+
+        // Add attachments
+        foreach (var attachment in sendMailModel.Attachments)
+        {
+            var attachmentPath = HttpContext.Current.Server.MapPath(attachment.FilePath);
+            mailMessage.Attachments.Add(new Attachment(attachmentPath));
+        }
+
+        smtpClient.Send(mailMessage);
+        return true;
+    }
+    catch (Exception ex)
+    {
+        LogError($"Error sending email: {ex.Message}");
+        return false;
+    }
+}
+```
+
+### Implementation of `UpdateEmailNoteStatus` Method
+
+Ensure the `UpdateEmailNoteStatus` method in your `RGContractorPortalEntities` context is correctly implemented and commits changes to the database:
+
+```csharp
+public void UpdateEmailNoteStatus(long emailNoteId, Int16 status, string exception, string innerException, string stackTrace)
+{
+    var emailNote = this.EmailNotes.FirstOrDefault(e => e.EmailNoteId == emailNoteId);
+    if (emailNote != null)
+    {
+        emailNote.EmailStatusId = status;
+        emailNote.Exception = exception;
+        emailNote.InnerException = innerException;
+        emailNote.StackTrace = stackTrace;
+        emailNote.UpdatedDate = DateTime.Now;
+
+        this.SaveChanges();
+    }
+}
+```
+
+With these changes and additions, you should be able to troubleshoot why emails are not being sent and why the `EmailStatus.Send` is not updating properly.
