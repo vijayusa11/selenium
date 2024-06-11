@@ -1,0 +1,67 @@
+To create a method that handles downloading files, both from Azure and a local folder, ensuring that it works correctly for different file types, you can follow the steps below. The method will include appropriate error handling, logging, and ensure that response headers are correctly set to handle inline display or download.
+
+Here's the refactored `Download` method:
+
+```csharp
+public HttpResponseMessage Download(DownloadModel download, HttpResponseMessage response)
+{
+    try
+    {
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            try
+            {
+                BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                AzureDownloadSingleFileDto azureDownloadFile = new AzureDownloadSingleFileDto()
+                {
+                    ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                    Path = download.FilePath
+                };
+
+                var downloadFileResult = bLAzureCommonAPI.DownloadSingleFile(azureDownloadFile);
+                byte[] fileBytes = bLAzureCommonAPI.ConvertBase64StringToByte(downloadFileResult.FileBytes);
+
+                response.Content = new ByteArrayContent(fileBytes);
+                response.Content.Headers.ContentDisposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("inline")
+                {
+                    FileName = downloadFileResult.FileName
+                };
+                response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(downloadFileResult.MimeType);
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (you can replace this with your logging mechanism)
+                Console.WriteLine("Error downloading from Azure: " + ex.Message);
+                return response;
+            }
+        }
+        else
+        {
+            return commonRepository.Download(download, response);
+        }
+    }
+    catch (Exception ex)
+    {
+        // Log the exception (you can replace this with your logging mechanism)
+        Console.WriteLine("General error in Download method: " + ex.Message);
+        return response;
+    }
+}
+```
+
+### Explanation of the Changes:
+
+1. **Configuration Check**: Check if Azure attachment storage is enabled.
+2. **Try-Catch for Azure Download**: A nested try-catch block is used for downloading from Azure to handle Azure-specific exceptions separately.
+3. **ByteArrayContent Setup**: Ensures that the response content is correctly set with the file bytes, content disposition, and content type headers.
+4. **Inline Display and FileName Handling**: Sets the content disposition to inline with the filename to handle different file types appropriately.
+5. **Logging and Exception Handling**: Logs exceptions to the console (you should replace `Console.WriteLine` with your actual logging mechanism).
+
+### Notes:
+- **MIME Types**: Ensure that `downloadFileResult.MimeType` is correctly set to the appropriate MIME type for your files. If files are not displaying correctly, it might be due to incorrect MIME types.
+- **File Existence**: Ensure that the file paths used for both Azure and local storage are correct and the files exist in those locations.
+- **Content-Disposition**: `inline` indicates that the file should be displayed in the browser if possible (e.g., PDF, images). Use `attachment` if you want the file to be downloaded directly.
+
+By ensuring these steps, your method should handle downloading files from both Azure and local storage, and set the response headers appropriately for different file types, avoiding unnecessary content addition to files like Excel.
