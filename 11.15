@@ -1,0 +1,62 @@
+private static bool SendMail(SendMailModel sendMailModel)
+{
+    try
+    {
+        SendEMail objSendMail = new SendEMail
+        {
+            FromEmailAddresses = sendMailModel.FromEmail,
+            ToEmailAddresses = sendMailModel.ToEmail,
+            CCAddresses = sendMailModel.CCEmail == null ? "" : sendMailModel.CCEmail,
+            SenderDisplayName = sendMailModel.SenderDisplayName,
+            Subject = sendMailModel.Subject
+        };
+
+        // Create Alternative HTML view
+        AlternateView htmlView = AlternateView.CreateAlternateViewFromString(sendMailModel.Body, null, "text/html");
+
+        // Add Image
+        HttpWebRequest aRequest = (HttpWebRequest)WebRequest.Create(sendMailModel.ApiURL + sendMailModel.EmailLogo);
+        HttpWebResponse aResponse = (HttpWebResponse)aRequest.GetResponse();
+
+        LinkedResource theEmailImage = new LinkedResource(aResponse.GetResponseStream())
+        {
+            ContentId = sendMailModel.ApiURL + sendMailModel.EmailLogo
+        };
+
+        // Add the Image to the Alternate view
+        htmlView.LinkedResources.Add(theEmailImage);
+
+        // Add view to the Email Message
+        objSendMail.AlternateView = htmlView;
+
+        objSendMail.Body = sendMailModel.Body;
+        objSendMail.IsBodyHTML = true;
+
+        if (sendMailModel.Attachments != null)
+        {
+            foreach (var item in sendMailModel.Attachments)
+            {
+                objSendMail.AddAttachment(item.FilePath, item.FileName);
+            }
+        }
+        return objSendMail.SendMail(sendMailModel);
+    }
+    catch (Exception ex)
+    {
+        // Log the exception (implement your logging mechanism here)
+        LogError("SendMail", ex);
+        return false;
+    }
+}
+
+private static void LogError(string methodName, Exception ex)
+{
+    // Implement your logging here
+    // For example, write to a log file or database
+    Console.WriteLine($"{methodName}: {ex.Message}");
+    if (ex.InnerException != null)
+    {
+        Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+    }
+    Console.WriteLine($"Stack Trace: {ex.StackTrace}");
+}
