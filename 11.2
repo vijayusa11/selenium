@@ -1,0 +1,232 @@
+public ResponseModel<bool> SaveDocument(HttpRequest documentDto)
+{
+    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+    {
+        using (TransactionScope scope = new TransactionScope())
+        {
+            int documentId = 0;
+            string errorPages = "";
+            DocumentDto document = new DocumentDto
+            {
+                DocumentId = Convert.ToInt32(documentDto["DocumentId"].ToString()),
+                DocumentTypeId = Convert.ToInt16(documentDto["DocumentTypeId"].ToString()),
+                DocumentSubTypeId = Convert.ToInt16(documentDto["DocumentSubTypeId"].ToString()),
+                Month = Convert.ToInt16(documentDto["Month"].ToString()),
+                Year = Convert.ToInt16(documentDto["Year"].ToString()),
+                IsActive = true,
+                CreatedBy = Convert.ToInt32(documentDto["CreatedBy"].ToString())
+            };
+
+            PageListingModel pageListing = new PageListingModel
+            {
+                Fetch = 0,
+                OffSet = 0,
+                CurrentPage = 1,
+                WhereCondition = ""
+            };
+
+            documentId = SaveDocumentWithMergeMultipleFiles(documentDto, document);
+
+            if (documentId > 0)
+            {
+                var allContractor = _contractorRepository.GetContractorListing(pageListing).ToList();
+                Int16 pageCount = 0, contractorCount = 0;
+                string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+
+                BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+                if (Convert.ToInt16(CommonBusiness.DocumentSubType.LeaverDocuments) == document.DocumentSubTypeId) //P60 have only single file for single contractor so you can add multile also.
+                {
+                    foreach (string fileName in documentDto.Files)
+                    {
+                        pageCount++;
+                        HttpPostedFile file = documentDto.Files[fileName];
+                        string[] spaId = file.FileName.ToString().Split('.')[0].ToString().Split('_');
+                        if (spaId.Length == 3)
+                        {
+                            var contractor = allContractor.Where(c => c.SpaId == spaId[2].ToString()).FirstOrDefault();
+                            if (contractor != null)
+                            {
+                                FindContractorExistingDocumentAndRemove(document.DocumentTypeId, document.DocumentSubTypeId, document.Month, document.Year, contractor.ContractorId);
+
+                                DocumentContractorDetailDto documentContractor = new DocumentContractorDetailDto
+                                {
+                                    ContractorId = contractor.ContractorId,
+                                    DocumentId = documentId,
+                                    FileName = "Document_" + contractor.SpaId + ".pdf",
+                                    FilePath = Path.Combine("Upload/Document/" + Datefolderpath + documentId, "Document_" + contractor.SpaId + ".pdf")
+                                };
+
+                                int documentContractorDetailId = SaveDocumentContractorDetail(documentContractor);
+                                contractorCount++;
+
+                                AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                                {
+                                    ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                                    FileName = documentContractor.FileName,
+                                    SavePath = "Upload/Document/" + Datefolderpath + documentId + "/" + documentContractorDetailId + "/",
+                                    FileBytes = bLAzureCommonAPI.ConvertStreamToByte(documentDto.InputStream, documentDto.ContentLength)
+                                    //FileBytes = bLAzureCommonAPI.ConvertFilePathToByte("", true)
+                                };
+                                bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+                                //CreateFolderIfNeeded(HttpContext.Current.Server.MapPath("~/Upload/Document/" + Datefolderpath + documentId + "/" + documentContractorDetailId + "/"));
+                                //file.SaveAs(HttpContext.Current.Server.MapPath("~/Upload/Document/" + Datefolderpath + documentId + "/" + documentContractorDetailId + "/" + documentContractor.FileName));
+
+                                SaveEmailLogForContractorDocument(contractor, document, "Upload/Document/" + Datefolderpath + documentId + "/" + documentContractorDetailId);
+                            }
+                        }
+                    }
+                }
+				}
+
+
+    .................
+
+
+    public ResponseModel<bool> SaveContractorEmailNote(HttpRequest emailNoteRequest)
+{
+    try
+    {
+        var generalConfiguration = _commonService.GetGeneralConfiguration();
+        List<Attachments> sendAttachment = new List<Attachments>();
+        EmailNoteDto emailNote = new EmailNoteDto()
+        {
+            EmailNoteId = 0,
+            ContractorId = Convert.ToInt32(emailNoteRequest["ContractorId"].ToString()),
+            Subject = emailNoteRequest["Subject"].ToString(),
+            Body = emailNoteRequest.Unvalidated["Body"].ToString(),
+            FromEmail = emailNoteRequest["FromEmail"].ToString(),
+            ToEmail = emailNoteRequest["ToEmail"].ToString(),
+            CCEmail = emailNoteRequest["CCEmail"].ToString() == "null" ? "" : emailNoteRequest["CCEmail"].ToString(),
+            EmailStatusId = Convert.ToInt16(EmailStatus.Pending),
+            Excepton = "",
+            InnerException = "",
+            StackTrace = "",
+            CreatedDate = DateTime.Now,
+            NoteId = 0,
+            ContractorSubject = emailNoteRequest["Subject"].ToString(),
+            Note = emailNoteRequest.Unvalidated["Body"].ToString(),
+            CreatedBy = _commonService.GetUserId(),
+            PhoneNoteId = 0,
+            MannualNoteId = 0,
+            NoteTypeId = Convert.ToInt16(NoteType.EmailNote),
+        };
+
+        Int64 emailNoteId = _contractorRepository.SaveContractorEmailNote(emailNote);
+        if (emailNoteId <= 0)
+        {
+            return _commonService.ReturnResponse(false, false, "Failed to save email note.");
+        }
+
+        if (emailNoteRequest.Files.Count > 0)
+        {
+            HttpPostedFile attachmentFile = emailNoteRequest.Files[0];
+
+            if (attachmentFile != null)
+            {
+                // Azure attachment code
+                if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+                {
+                    BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                    string filename11 = "UploadedFiles/" + _commonService.GetUserId().ToString();
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    string folderPath = "~//Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+                    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                    {
+                        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                        FileName = attachmentFile.FileName,
+                        SavePath = filename11,
+                        FileBytes = bLAzureCommonAPI.ConvertFilePathToByte(Path.Combine(folderPath, attachmentFile.FileName), true)
+                    };
+                    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+                }
+                else
+                {
+
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    string filePath = "~//Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+
+                    EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+                    {
+                        EmailNoteAttachmentId = 0,
+                        EmailNoteId = emailNoteId,
+                        FileName = attachmentFile.FileName,
+                        FilePath = filePath
+                    };
+                    Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+                  //  var folderPath = HttpContext.Current.Server.MapPath(filePath + attachmentId.ToString());
+                    CreateFolderIfNeeded(folderPath);
+                    attachmentFile.SaveAs(Path.Combine(folderPath, attachmentFile.FileName));
+                    sendAttachment.Add(new Attachments()
+                    {
+                        FileName = attachmentFile.FileName,
+                        FilePath = Path.Combine(folderPath, attachmentFile.FileName)
+                    });
+
+                }
+            }
+
+            
+        }
+
+        string attachmentIds = emailNoteRequest["attachmentIds"];
+        if (!String.IsNullOrEmpty(attachmentIds))
+        {
+            Int16 templateId = Convert.ToInt16(emailNoteRequest["TemplateId"].ToString());
+            var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+            string[] arr = attachmentIds.Split(',');
+            foreach (var item in arr)
+            {
+                var attachments = templateAttachments.Find(t => t.TemplateAttachmentId == Convert.ToInt16(item));
+
+                string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                string filePath = "~//Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+
+                EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+                {
+                    EmailNoteAttachmentId = 0,
+                    EmailNoteId = emailNoteId,
+                    FileName = attachments.FileName,
+                    FilePath = filePath
+                };
+                Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+                var folderPath = HttpContext.Current.Server.MapPath(filePath + attachmentId.ToString());
+                CreateFolderIfNeeded(folderPath);
+
+                if (File.Exists(HttpContext.Current.Server.MapPath(attachments.FilePath)))
+                {
+                    System.IO.File.Copy(HttpContext.Current.Server.MapPath(attachments.FilePath), Path.Combine(folderPath, attachments.FileName), true);
+                    sendAttachment.Add(new Attachments()
+                    {
+                        FileName = attachments.FileName,
+                        FilePath = Path.Combine(folderPath, attachments.FileName)
+                    });
+
+                    // Azure attachment code
+                    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+                    {
+                        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                        string filename11 = "UploadedFiles/" + _commonService.GetUserId().ToString();
+                        AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                        {
+                            ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                            FileName = attachments.FileName,
+                            SavePath = filename11,
+                            FileBytes = bLAzureCommonAPI.ConvertFilePathToByte(Path.Combine(folderPath, attachments.FileName), true)
+                        };
+                        bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+                    }
+                }
+            }
+        }
+
+        return _commonService.ReturnResponse(true, true, "Email sent successfully.");
+    }
+    catch (Exception ex)
+    {
+        return _commonService.ReturnResponse(false, false, "Error occurred: " + ex.Message);
+    }
+}
