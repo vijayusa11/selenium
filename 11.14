@@ -1,0 +1,96 @@
+ private static void SendAllPendingMails(GeneralConfiguration generalConfiguration)
+ {
+     using (RGContractorPortalEntities rGContractorPortalEntities = new RGContractorPortalEntities())
+     {
+         var pendingEmails = rGContractorPortalEntities.GetPendingEmailNotes().ToList();
+         if (pendingEmails != null && pendingEmails.Count > 0)
+         {
+             foreach (var pendingMail in pendingEmails)
+             {
+                 var emailNoteAttacchments = rGContractorPortalEntities.GetEmailNoteAttachment(pendingMail.EmailNoteId).ToList();
+                 List<Attachments> Attachments = new List<Attachments>();
+
+                 if (emailNoteAttacchments != null && emailNoteAttacchments.Count > 0)
+                 {
+                     foreach (var emailNoteAttachment in emailNoteAttacchments)
+                     {
+                         Attachments.Add(new Attachments()
+                         {
+                             FileName = emailNoteAttachment.FileName,
+                             FilePath = Decrypt(ConfigurationManager.AppSettings["BasePath"]) + emailNoteAttachment.FilePath.Remove(0, 2).ToString(),
+                             HalfPath = emailNoteAttachment.FilePath
+                         });
+                     }
+                 }
+
+                 SendMailModel sendMailModel = new SendMailModel()
+                 {
+                     FromEmail = Decrypt(generalConfiguration.FromEmailAddress),
+                     ToEmail = pendingMail.ToEmail,
+                     CCEmail = pendingMail.CCEmail,
+                     SenderDisplayName = "RG Contractor Portal",
+                     Subject = pendingMail.Subject,
+                     Body = pendingMail.Body,
+                     ApiURL = Decrypt(generalConfiguration.APIUrl),
+                     EmailLogo = Decrypt(generalConfiguration.EmailLogo),
+                     WebURL = Decrypt(generalConfiguration.WebUrl),
+                     SMTPServer = Decrypt(generalConfiguration.SMTPServer),
+                     SMTPUserName = Decrypt(generalConfiguration.SMTPUserName),
+                     SMTPPassword = Decrypt(generalConfiguration.SMTPPassword),
+                     SMTPPort = Decrypt(generalConfiguration.SMTPPort),
+                     Attachments = Attachments,
+                     EmailNoteId = pendingMail.EmailNoteId
+                 };
+                 if (SendMail(sendMailModel) == true)
+                 {
+                     rGContractorPortalEntities.UpdateEmailNoteStatus(pendingMail.EmailNoteId, (Int16)EmailStatus.Send, null, null, null);
+                 }
+             }
+         }
+     }
+ }
+ private static bool SendMail(SendMailModel sendMailModel)
+ {
+     SendEMail objSendMail = new SendEMail
+     {
+         FromEmailAddresses = sendMailModel.FromEmail,
+         ToEmailAddresses = sendMailModel.ToEmail,
+         CCAddresses = sendMailModel.CCEmail == null ? "" : sendMailModel.CCEmail,
+         SenderDisplayName = sendMailModel.SenderDisplayName,
+         Subject = sendMailModel.Subject
+     };
+
+     //create Alrternative HTML view
+     AlternateView htmlView = AlternateView.CreateAlternateViewFromString(sendMailModel.Body, null, "text/html");
+
+     //Add Image
+     HttpWebRequest aRequest = (HttpWebRequest)WebRequest.Create(sendMailModel.ApiURL + sendMailModel.EmailLogo);
+     HttpWebResponse aResponse = (HttpWebResponse)aRequest.GetResponse();
+
+     LinkedResource theEmailImage = new LinkedResource(aResponse.GetResponseStream())
+     {
+         ContentId = sendMailModel.ApiURL + sendMailModel.EmailLogo
+     };
+
+     //Add the Image to the Alternate view
+     htmlView.LinkedResources.Add(theEmailImage);
+
+     //Add view to the Email Message
+     objSendMail.AlternateView = htmlView;
+
+     objSendMail.Body = sendMailModel.Body;
+     objSendMail.IsBodyHTML = true;
+
+     if (sendMailModel.Attachments != null)
+     {
+         foreach (var item in sendMailModel.Attachments)
+         {
+             objSendMail.AddAttachment(item.FilePath, item.FileName);
+         }
+     }
+     return objSendMail.SendMail(sendMailModel);
+ }
+
+ every time getting false here
+if (SendMail(sendMailModel) == true)
+want to know reason and want to get true here so can UpdateEmailNoteStatus method and want to set EmailStatus.Send
