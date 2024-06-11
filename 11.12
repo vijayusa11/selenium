@@ -1,0 +1,99 @@
+public ResponseModel<bool> SaveContractorEmailNote(HttpRequest emailNoteRequest)
+{
+    try
+    {
+        var generalConfiguration = _commonService.GetGeneralConfiguration();
+        List<Attachments> sendAttachment = new List<Attachments>();
+
+        EmailNoteDto emailNote = new EmailNoteDto()
+        {
+            EmailNoteId = 0,
+            ContractorId = Convert.ToInt32(emailNoteRequest["ContractorId"].ToString()),
+            Subject = emailNoteRequest["Subject"].ToString(),
+            Body = emailNoteRequest.Unvalidated["Body"].ToString(),
+            FromEmail = emailNoteRequest["FromEmail"].ToString(),
+            ToEmail = emailNoteRequest["ToEmail"].ToString(),
+            CCEmail = emailNoteRequest["CCEmail"].ToString() == "null" ? "" : emailNoteRequest["CCEmail"].ToString(),
+           // EmailStatusId = Convert.ToInt16(EmailStatus.Pending),
+            EmailStatusId = Convert.ToInt16(EmailStatus.Send),
+            Excepton = "",
+            InnerException = "",
+            StackTrace = "",
+            CreatedDate = DateTime.Now,
+            NoteId = 0,
+            ContractorSubject = emailNoteRequest["Subject"].ToString(),
+            Note = emailNoteRequest.Unvalidated["Body"].ToString(),
+            CreatedBy = _commonService.GetUserId(),
+            PhoneNoteId = 0,
+            MannualNoteId = 0,
+            NoteTypeId = Convert.ToInt16(NoteType.EmailNote),
+        };
+
+        Int64 emailNoteId = _contractorRepository.SaveContractorEmailNote(emailNote);
+        if (emailNoteId <= 0)
+        {
+            return _commonService.ReturnResponse(false, false, "Failed to save email note.");
+        }
+
+        // Handling direct file attachments
+        if (emailNoteRequest.Files.Count > 0)
+        {
+            foreach (string fileName in emailNoteRequest.Files)
+            {
+                HttpPostedFile attachmentFile = emailNoteRequest.Files[fileName];
+
+                if (attachmentFile != null)
+                {
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    string folderPath = "Upload/ContractorEmailNote/" + Datefolderpath + emailNoteId.ToString() + "/";
+
+                    EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+                    {
+                        EmailNoteAttachmentId = 0,
+                        EmailNoteId = emailNoteId,
+                        FileName = attachmentFile.FileName,
+                        FilePath = folderPath
+                    };
+                    Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+                    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+                    {
+                        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+                        AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                        {
+                            ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                            FileName = attachmentFile.FileName,
+                            SavePath = folderPath + attachmentId.ToString(),
+                            FileBytes = bLAzureCommonAPI.ConvertStreamToByte(emailNoteRequest.InputStream, emailNoteRequest.ContentLength)
+                        };
+                        bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+                        sendAttachment.Add(new Attachments()
+                        {
+                            FileName = attachmentFile.FileName,
+                            FilePath = Path.Combine(folderPath, attachmentId.ToString(), attachmentFile.FileName)
+                        });
+                    }
+                    else
+                    {
+                        var folderPathLocal = HttpContext.Current.Server.MapPath(folderPath + attachmentId.ToString());
+                        CreateFolderIfNeeded(folderPathLocal);
+                        attachmentFile.SaveAs(Path.Combine(folderPathLocal, attachmentId.ToString(), attachmentFile.FileName));
+                        sendAttachment.Add(new Attachments()
+                        {
+                            FileName = attachmentFile.FileName,
+                            FilePath = Path.Combine(folderPathLocal, attachmentId.ToString(), attachmentFile.FileName)
+                        });
+                    }
+                }
+            }
+        }
+
+getting error in this line -
+ System.IO.File.Copy(HttpContext.Current.Server.MapPath(attachments.FilePath), Path.Combine(folderPath, attachmentId.ToString(), attachments.FileName), true);
+
+error - 
+Contractor Email Note
+Error occurred: Could not find a part of the path 'D:\Projects\RG_ContractorPortal\RGContractorPortal.WebAPI\
+RGContractorPortal.WebAPI\api\contractor\Upload\ContractorEmailNote\2024\6\11\2268\964\964\ContractorList.csv'.
