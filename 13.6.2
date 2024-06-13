@@ -1,0 +1,89 @@
+To integrate Azure-specific save logic into the `SaveTemplate` method while retaining the existing local save logic, you can follow a similar approach as used in the `SaveTicketAttachment` method. The key steps involve:
+
+1. Checking the configuration setting to determine whether to use Azure or local storage.
+2. Implementing Azure-specific save logic.
+3. Retaining the existing local save logic.
+
+Here's how you can modify the `SaveTemplate` method:
+
+```csharp
+public ResponseModel<bool> SaveTemplate(HttpRequest templateModel)
+{
+    using (TransactionScope scope = new TransactionScope())
+    {
+        TemplateModel model = new TemplateModel();
+        TemplateDto template = new TemplateDto();
+        template.TemplateId = Convert.ToInt16(templateModel["TemplateId"].ToString());
+        template.TemplateSubject = templateModel["TemplateSubject"].ToString();
+        template.TemplateBody = templateModel.Unvalidated["TemplateBody"].ToString();
+        template.IsActive = Convert.ToBoolean(templateModel["IsActive"].ToString());
+        template.CreatedBy = Convert.ToInt32(templateModel["CreatedBy"].ToString());
+        model.NewTemplate = template;
+
+        if (templateModel["OldTemplateId"] != null || templateModel["OldTemplateSubject"] != null || templateModel["OldTemplateBody"] != null || templateModel["OldIsActive"] != null || templateModel["OldCreatedBy"] != null)
+        {
+            TemplateDto oldtemplate = new TemplateDto
+            {
+                TemplateId = Convert.ToInt16(templateModel["OldTemplateId"].ToString()),
+                TemplateSubject = templateModel["OldTemplateSubject"].ToString(),
+                TemplateBody = templateModel.Unvalidated["OldTemplateBody"].ToString(),
+                IsActive = Convert.ToBoolean(templateModel["OldIsActive"].ToString()),
+                CreatedBy = Convert.ToInt32(templateModel["OldCreatedBy"].ToString())
+            };
+            model.OldTemplate = oldtemplate;
+        }
+        bool isEdit = template.TemplateId > 0;
+
+        Int16 templateId;
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            // Azure-specific save logic
+            templateId = SaveTemplateToAzure(template);
+        }
+        else
+        {
+            // Local save logic
+            templateId = _templateRepository.SaveTemplate(template);
+        }
+
+        SaveTemplateAttachment(templateModel, templateId, isEdit);
+        AddTemplateNote(model, templateId);
+
+        scope.Complete();
+
+        return _commonService.ReturnResponse(true, true, template.TemplateId == 0 ? "Template saved successfully." : "Template updated successfully.");
+    }
+}
+
+private Int16 SaveTemplateToAzure(TemplateDto template)
+{
+    BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+    // Implement Azure saving logic here
+    // This can involve creating an Azure blob, saving metadata to Azure SQL, etc.
+
+    // Example Azure save logic (modify as per your actual implementation)
+    string azureSavePath = $"Upload/Template/{template.TemplateId}/";
+    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+    {
+        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+        FileName = $"{template.TemplateId}.json", // Example filename
+        SavePath = azureSavePath,
+        FileBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(template)) // Convert template to byte array
+    };
+    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+    // Save metadata to Azure SQL or other Azure service
+    // ...
+
+    // Return the saved template ID
+    return template.TemplateId;
+}
+```
+
+### Key Changes:
+1. **Configuration Check**: Added an if-else condition to check `ConfigurationManager.AppSettings["Azure_Attachment"]`.
+2. **Azure Save Logic**: Added a private method `SaveTemplateToAzure` to handle Azure-specific save logic. This is a placeholder and should be implemented based on your actual Azure saving requirements.
+3. **Local Save Logic**: Retained the existing local save logic in the else part of the condition.
+
+Make sure to adapt the Azure saving logic in `SaveTemplateToAzure` according to your specific requirements, such as saving to Azure Blob Storage, Azure SQL Database, etc. The above example assumes you have a method to save files to Azure and a way to convert the template to a byte array for storage. Adjust the code to fit your actual Azure save procedures.
