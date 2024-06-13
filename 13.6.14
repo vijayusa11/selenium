@@ -1,0 +1,93 @@
+To ensure the `RemoveTemplateAttachment` method works correctly with both Azure and local storage, we need to handle the attachment removal process properly. The key is to accurately locate and delete the files both in Azure and on the local file system. Let's refine the method:
+
+1. **Check for the existence of the attachment both in Azure and locally.**
+2. **Delete the attachment accordingly.**
+3. **Remove the attachment record from the repository.**
+
+Here’s the corrected and improved `RemoveTemplateAttachment` method:
+
+### Improved `RemoveTemplateAttachment` Method
+
+```csharp
+private void RemoveTemplateAttachment(Int16 attachmentId, short templateId)
+{
+    // Retrieve attachment from repository
+    var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+    var attachment = templateAttachments.FirstOrDefault(t => t.TemplateAttachmentId == attachmentId);
+
+    if (attachment != null)
+    {
+        // Define the path for Azure and local storage
+        string filePath = attachment.FilePath;
+        string fileName = attachment.FileName;
+
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            // Azure Storage Deletion
+            BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+            AzureDeleteSingleFileDto azureDeleteSingleFile = new AzureDeleteSingleFileDto()
+            {
+                ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                Path = filePath + "/" + fileName
+            };
+
+            var deleteResult = bLAzureCommonAPI.DeleteSingleFile(azureDeleteSingleFile);
+
+            if (deleteResult.IsSuccess)
+            {
+                // Remove attachment record from repository after successful deletion from Azure
+                _templateRepository.DeleteTemplateAttachment(attachmentId);
+            }
+            else
+            {
+                throw new Exception("Failed to delete the file from Azure storage.");
+            }
+        }
+        else
+        {
+            // Local Storage Deletion
+            string localFilePath = HttpContext.Current.Server.MapPath(filePath);
+            string localDirectoryPath = Path.GetDirectoryName(localFilePath);
+
+            if (File.Exists(localFilePath))
+            {
+                // Delete the file from the local directory
+                File.Delete(localFilePath);
+                
+                // Check if the directory is empty and delete it
+                if (Directory.GetFiles(localDirectoryPath).Length == 0)
+                {
+                    Directory.Delete(localDirectoryPath, true);
+                }
+                
+                // Remove attachment record from repository after successful deletion from local storage
+                _templateRepository.DeleteTemplateAttachment(attachmentId);
+            }
+            else
+            {
+                throw new Exception("File does not exist in local storage.");
+            }
+        }
+    }
+    else
+    {
+        throw new Exception("Attachment not found.");
+    }
+}
+```
+
+### Key Points:
+1. **Azure Deletion:**
+   - Uses `BLAzureCommonAPI` to delete the file from Azure storage.
+   - Only removes the attachment record from the repository if the file is successfully deleted from Azure.
+
+2. **Local Deletion:**
+   - Maps the file path to the server's local directory.
+   - Checks if the file exists and deletes it.
+   - Removes the directory if it’s empty after the file deletion.
+   - Only removes the attachment record from the repository if the file is successfully deleted from local storage.
+
+3. **Error Handling:**
+   - Throws exceptions with meaningful messages if the file or attachment is not found or if deletion fails.
+
+By making these adjustments, the `RemoveTemplateAttachment` method should now correctly handle file deletions from both Azure and local storage environments, ensuring that attachments are properly managed based on your application's configuration.
