@@ -1,0 +1,78 @@
+To implement the `DeleteSingleFile` method for both Azure and local storage in the `RemoveTemplateAttachment` method, we need to follow the same approach used in the `SaveTicketAttachment` method. Specifically, we'll check if the Azure storage is being used and then perform the deletion accordingly. Here's how you can modify your `RemoveTemplateAttachment` method to include the deletion logic for both Azure and local storage:
+
+```csharp
+private void RemoveTemplateAttachment(Int16 attachmentId, short templateId)
+{
+    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto();
+    attachmentDto.TemplateId = templateId;
+    attachmentDto.TemplateAttachmentId = Convert.ToInt16(attachmentId);
+
+    var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+    var attachment = templateAttachments.Where(t => t.TemplateAttachmentId == attachmentId).FirstOrDefault();
+
+    if (attachment != null)
+    {
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            // Azure Storage Deletion
+            BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+            AzureDeleteSingleFileDto azureDeleteSingleFile = new AzureDeleteSingleFileDto()
+            {
+                ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                Path = attachment.FilePath + "/" + attachment.FileName
+            };
+            var deleteResult = bLAzureCommonAPI.DeleteSingleFile(azureDeleteSingleFile);
+
+            if (deleteResult.IsSuccess)
+            {
+                Int16 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+            }
+            else
+            {
+                // Handle deletion failure
+                throw new Exception("Failed to delete the file from Azure storage.");
+            }
+        }
+        else
+        {
+            // Local Storage Deletion
+            var folderPath = HttpContext.Current.Server.MapPath(attachment.FilePath);
+            if (Directory.Exists(Path.GetDirectoryName(folderPath)))
+            {
+                Directory.Delete(Path.GetDirectoryName(folderPath), true);
+                Int16 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+            }
+            else
+            {
+                // Handle directory not existing
+                throw new Exception("Directory does not exist.");
+            }
+        }
+    }
+    else
+    {
+        // Handle attachment not found
+        throw new Exception("Attachment not found.");
+    }
+}
+```
+
+### Explanation:
+
+1. **Azure Storage Deletion:**
+    - Check if Azure storage is enabled (`ConfigurationManager.AppSettings["Azure_Attachment"] == "1"`).
+    - Instantiate the `BLAzureCommonAPI` object.
+    - Create an `AzureDeleteSingleFileDto` object with the required details.
+    - Call the `DeleteSingleFile` method of `BLAzureCommonAPI` to delete the file from Azure storage.
+    - Check the deletion result (`deleteResult.IsSuccess`). If successful, save the template attachment information to the repository.
+
+2. **Local Storage Deletion:**
+    - Compute the local storage folder path.
+    - Check if the directory exists.
+    - Delete the directory and its contents using `Directory.Delete`.
+    - Save the template attachment information to the repository.
+
+3. **Error Handling:**
+    - Add error handling for cases where the file or directory doesn't exist or the deletion operation fails.
+
+By incorporating these changes, the `RemoveTemplateAttachment` method will handle file deletions correctly for both Azure and local storage scenarios.
