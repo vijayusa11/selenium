@@ -1,0 +1,155 @@
+To modify the `SaveTemplate` method to handle saving templates to both Azure and local storage, you need to incorporate the logic to save attachments and perform necessary operations depending on whether Azure storage is enabled or not. Here’s the updated `SaveTemplate` method:
+
+```csharp
+public ResponseModel<bool> SaveTemplate(HttpRequest templateModel)
+{
+    using (TransactionScope scope = new TransactionScope())
+    {
+        TemplateModel model = new TemplateModel();
+        TemplateDto template = new TemplateDto();
+        template.TemplateId = Convert.ToInt16(templateModel["TemplateId"].ToString());
+        template.TemplateSubject = templateModel["TemplateSubject"].ToString();
+        template.TemplateBody = templateModel.Unvalidated["TemplateBody"].ToString();
+        template.IsActive = Convert.ToBoolean(templateModel["IsActive"].ToString());
+        template.CreatedBy = Convert.ToInt32(templateModel["CreatedBy"].ToString());
+        model.NewTemplate = template;
+
+        if (templateModel["OldTemplateId"] != null || templateModel["OldTemplateSubject"] != null || templateModel["OldTemplateBody"] != null || templateModel["OldIsActive"] != null || templateModel["OldCreatedBy"] != null)
+        {
+            TemplateDto oldtemplate = new TemplateDto
+            {
+                TemplateId = Convert.ToInt16(templateModel["OldTemplateId"].ToString()),
+                TemplateSubject = templateModel["OldTemplateSubject"].ToString(),
+                TemplateBody = templateModel.Unvalidated["OldTemplateBody"].ToString(),
+                IsActive = Convert.ToBoolean(templateModel["OldIsActive"].ToString()),
+                CreatedBy = Convert.ToInt32(templateModel["OldCreatedBy"].ToString())
+            };
+            model.OldTemplate = oldtemplate;
+        }
+        
+        bool isEdit = template.TemplateId > 0;
+
+        Int16 templateId = _templateRepository.SaveTemplate(template);
+
+        // Call SaveTemplateAttachment with Azure and local storage handling
+        SaveTemplateAttachment(templateModel, templateId, isEdit);
+
+        AddTemplateNote(model, templateId);
+
+        scope.Complete();
+        
+        return _commonService.ReturnResponse(true, true, template.TemplateId == 0 ? "Template saved successfully." : "Template updated successfully.");
+    }
+}
+```
+
+### SaveTemplateAttachment Method
+
+Below is the `SaveTemplateAttachment` method that handles both Azure and local storage scenarios:
+
+```csharp
+private void SaveTemplateAttachment(HttpRequest templateAttachmentRequest, Int16 templateId, bool isEdit)
+{
+    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+    {
+        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+        if (templateAttachmentRequest.Files.Count > 0)
+        {
+            for (int i = 0; i < templateAttachmentRequest.Files.AllKeys.Length; i++)
+            {
+                HttpPostedFile attachmentFile = templateAttachmentRequest.Files[i];
+                if (attachmentFile != null)
+                {
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto()
+                    {
+                        TemplateId = templateId,
+                        TemplateAttachmentId = 0,
+                        FileName = attachmentFile.FileName,
+                        FilePath = Path.Combine("Upload/Template/" + Datefolderpath + templateId, attachmentFile.FileName),
+                    };
+                    Int32 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+
+                    var folderPath = "Upload/Template/" + Datefolderpath + templateId + "/" + templateAttachmentId;
+
+                    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                    {
+                        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                        FileName = attachmentFile.FileName,
+                        SavePath = folderPath,
+                        FileBytes = bLAzureCommonAPI.ConvertStreamToByte(attachmentFile.InputStream, attachmentFile.ContentLength),
+                    };
+                    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+                }
+            }
+        }
+
+        if (isEdit)
+        {
+            string attachmentIds = templateAttachmentRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                string[] arr = attachmentIds.Split(',');
+                foreach (var item in arr)
+                {
+                    RemoveTemplateAttachment(Convert.ToInt16(item), templateId);
+                }
+            }
+        }
+    }
+    else
+    {
+        if (templateAttachmentRequest.Files.Count > 0)
+        {
+            for (int i = 0; i < templateAttachmentRequest.Files.AllKeys.Length; i++)
+            {
+                HttpPostedFile attachmentFile = templateAttachmentRequest.Files[i];
+                if (attachmentFile != null)
+                {
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto()
+                    {
+                        TemplateId = templateId,
+                        TemplateAttachmentId = 0,
+                        FileName = attachmentFile.FileName,
+                        FilePath = Path.Combine("~/Upload/Template/" + Datefolderpath + templateId, attachmentFile.FileName),
+                    };
+                    Int32 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+                    var folderPath = HttpContext.Current.Server.MapPath("~//Upload/Template/" + Datefolderpath + templateId + "/" + templateAttachmentId);
+                    CreateFolderIfNeeded(folderPath);
+                    attachmentFile.SaveAs(Path.Combine(folderPath, attachmentFile.FileName));
+                }
+            }
+        }
+
+        if (isEdit)
+        {
+            string attachmentIds = templateAttachmentRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                string[] arr = attachmentIds.Split(',');
+                foreach (var item in arr)
+                {
+                    RemoveTemplateAttachment(Convert.ToInt16(item), templateId);
+                }
+            }
+        }
+    }
+}
+```
+
+### Explanation:
+
+1. **Azure Storage Handling:**
+   - Check if Azure storage is enabled using the app setting `Azure_Attachment`.
+   - For each file in the request, create a `TemplateAttachmentDto` and save the attachment information.
+   - Use `BLAzureCommonAPI` to convert the file stream to bytes and upload the file to Azure storage.
+
+2. **Local Storage Handling:**
+   - If Azure storage is not enabled, handle file uploads locally.
+   - Save the file information to the repository and store the file in the local file system using `HttpContext.Current.Server.MapPath`.
+
+3. **Handling Edits:**
+   - If the `isEdit` flag is true, parse the `attachmentIds` from the request and call `RemoveTemplateAttachment` to delete the old attachments.
+
+By incorporating these changes, your `SaveTemplate` method will handle file uploads and deletions for both Azure and local storage scenarios.
