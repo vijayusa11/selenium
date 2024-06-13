@@ -2,3 +2,94 @@ Severity	Code	Description	Project	File	Line	Suppression State
 Error	CS0029	Cannot implicitly convert type 'short' to 'RGContractorPortal.Entities.Model.ResponseModel<bool>'	
 RGContractorPortal.Service	D:\Projects\RG_ContractorPortal\RGContractorPortal.WebAPI\RGContractorPortal.Service\Service\TemplateService.cs	
 79	Active
+
+
+The error `CS0029: Cannot implicitly convert type 'short' to 'RGContractorPortal.Entities.Model.ResponseModel<bool>'` is indicating that the method `SaveTemplateToAzure` returns a `short` (the template ID), but it is being assigned to a `ResponseModel<bool>`.
+
+To resolve this issue, you need to ensure that the method `SaveTemplateToAzure` returns the template ID (short), and then use it properly to create the `ResponseModel<bool>`.
+
+Here is the corrected code:
+
+```csharp
+public ResponseModel<bool> SaveTemplate(HttpRequest templateModel)
+{
+    using (TransactionScope scope = new TransactionScope())
+    {
+        TemplateModel model = new TemplateModel();
+        TemplateDto template = new TemplateDto();
+        template.TemplateId = Convert.ToInt16(templateModel["TemplateId"].ToString());
+        template.TemplateSubject = templateModel["TemplateSubject"].ToString();
+        template.TemplateBody = templateModel.Unvalidated["TemplateBody"].ToString();
+        template.IsActive = Convert.ToBoolean(templateModel["IsActive"].ToString());
+        template.CreatedBy = Convert.ToInt32(templateModel["CreatedBy"].ToString());
+        model.NewTemplate = template;
+
+        if (templateModel["OldTemplateId"] != null || templateModel["OldTemplateSubject"] != null || templateModel["OldTemplateBody"] != null || templateModel["OldIsActive"] != null || templateModel["OldCreatedBy"] != null)
+        {
+            TemplateDto oldtemplate = new TemplateDto
+            {
+                TemplateId = Convert.ToInt16(templateModel["OldTemplateId"].ToString()),
+                TemplateSubject = templateModel["OldTemplateSubject"].ToString(),
+                TemplateBody = templateModel.Unvalidated["OldTemplateBody"].ToString(),
+                IsActive = Convert.ToBoolean(templateModel["OldIsActive"].ToString()),
+                CreatedBy = Convert.ToInt32(templateModel["OldCreatedBy"].ToString())
+            };
+            model.OldTemplate = oldtemplate;
+        }
+        bool isEdit = template.TemplateId > 0;
+
+        Int16 templateId;
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            // Azure-specific save logic
+            templateId = SaveTemplateToAzure(template);
+        }
+        else
+        {
+            // Local save logic
+            templateId = _templateRepository.SaveTemplate(template);
+        }
+
+        SaveTemplateAttachment(templateModel, templateId, isEdit);
+        AddTemplateNote(model, templateId);
+
+        scope.Complete();
+
+        return _commonService.ReturnResponse(true, true, template.TemplateId == 0 ? "Template saved successfully." : "Template updated successfully.");
+    }
+}
+
+private Int16 SaveTemplateToAzure(TemplateDto template)
+{
+    BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+    // Implement Azure saving logic here
+    // This can involve creating an Azure blob, saving metadata to Azure SQL, etc.
+
+    // Example Azure save logic (modify as per your actual implementation)
+    string azureSavePath = $"Upload/Template/{template.TemplateId}/";
+    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+    {
+        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+        FileName = $"{template.TemplateId}.json", // Example filename
+        SavePath = azureSavePath,
+        FileBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(template)) // Convert template to byte array
+    };
+    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+    // Save metadata to Azure SQL or other Azure service
+    // ...
+
+    // Return the saved template ID
+    return template.TemplateId;
+}
+```
+
+### Explanation:
+1. **Method `SaveTemplateToAzure`**: This method now properly returns the template ID (`short`) after saving the template to Azure.
+
+2. **Assigning `templateId`**: Based on the configuration, `templateId` is assigned either by calling `SaveTemplateToAzure` or `_templateRepository.SaveTemplate`.
+
+3. **Returning Response**: After saving the template and attachments, the method constructs and returns a `ResponseModel<bool>` with a message indicating whether the template was saved or updated successfully.
+
+Make sure to adjust the Azure saving logic in `SaveTemplateToAzure` to fit your actual implementation requirements.
