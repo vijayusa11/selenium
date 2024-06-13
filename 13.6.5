@@ -1,0 +1,84 @@
+Based on your requirement, here's the revised version of the code that ensures proper handling of Azure and local storage scenarios, while addressing the error by correctly assigning the template ID and creating a proper response:
+
+```csharp
+public ResponseModel<bool> SaveTemplate(HttpRequest templateModel)
+{
+    using (TransactionScope scope = new TransactionScope())
+    {
+        TemplateModel model = new TemplateModel();
+        TemplateDto template = new TemplateDto();
+        template.TemplateId = Convert.ToInt16(templateModel["TemplateId"].ToString());
+        template.TemplateSubject = templateModel["TemplateSubject"].ToString();
+        template.TemplateBody = templateModel.Unvalidated["TemplateBody"].ToString();
+        template.IsActive = Convert.ToBoolean(templateModel["IsActive"].ToString());
+        template.CreatedBy = Convert.ToInt32(templateModel["CreatedBy"].ToString());
+        model.NewTemplate = template;
+
+        if (templateModel["OldTemplateId"] != null || templateModel["OldTemplateSubject"] != null || templateModel["OldTemplateBody"] != null || templateModel["OldIsActive"] != null || templateModel["OldCreatedBy"] != null)
+        {
+            TemplateDto oldtemplate = new TemplateDto
+            {
+                TemplateId = Convert.ToInt16(templateModel["OldTemplateId"].ToString()),
+                TemplateSubject = templateModel["OldTemplateSubject"].ToString(),
+                TemplateBody = templateModel.Unvalidated["OldTemplateBody"].ToString(),
+                IsActive = Convert.ToBoolean(templateModel["OldIsActive"].ToString()),
+                CreatedBy = Convert.ToInt32(templateModel["OldCreatedBy"].ToString())
+            };
+            model.OldTemplate = oldtemplate;
+        }
+        bool isEdit = template.TemplateId > 0;
+
+        Int16 templateId;
+        if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+        {
+            // Azure-specific save logic
+            templateId = SaveTemplateToAzure(template);
+        }
+        else
+        {
+            // Local save logic
+            templateId = _templateRepository.SaveTemplate(template);
+        }
+
+        SaveTemplateAttachment(templateModel, templateId, isEdit);
+        AddTemplateNote(model, templateId);
+
+        scope.Complete();
+
+        return _commonService.ReturnResponse(true, true, templateId == 0 ? "Template saved successfully." : "Template updated successfully.");
+    }
+}
+
+private Int16 SaveTemplateToAzure(TemplateDto template)
+{
+    BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+    // Implement Azure saving logic here
+    // This can involve creating an Azure blob, saving metadata to Azure SQL, etc.
+
+    // Example Azure save logic (modify as per your actual implementation)
+    string azureSavePath = $"Upload/Template/{template.TemplateId}/";
+    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+    {
+        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+        FileName = $"{template.TemplateId}.json", // Example filename
+        SavePath = azureSavePath,
+        FileBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(template)) // Convert template to byte array
+    };
+    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+    // Save metadata to Azure SQL or other Azure service
+    // ...
+
+    // Return the saved template ID
+    return template.TemplateId;
+}
+
+private void SaveTemplateAttachment(HttpRequest templateModel, Int16 templateId, bool isEdit)
+{
+    // Your existing logic to save template attachments, modified to handle Azure and local storage
+}
+```
+
+### Explanation:
+1. **Assigning `templateId`**: The
