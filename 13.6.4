@@ -1,0 +1,174 @@
+public ResponseModel<bool> DeleteDocument(int documentId)
+{
+    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+    {
+        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+        using (TransactionScope scope = new TransactionScope())
+        {
+            var generalConfiguration = _commonService.GetGeneralConfiguration();
+            var document = _documentRepository.GetDocument(documentId);
+            var contractorDocuments = _documentRepository.GetDocumentContractorDetail(documentId);
+
+            string halfPath = document.FilePath.Remove(0, 19).ToString();
+            document.FilePath = document.FilePath.Replace(Decrypt(generalConfiguration.APIUrl), "~");
+
+            AzureDownloadSingleFileDto azureDownloadFile = new AzureDownloadSingleFileDto()
+            {
+                ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                Path = document.FilePath.Replace(Decrypt(generalConfiguration.APIUrl), "~")
+            };
+            var downloadFileResult = bLAzureCommonAPI.DownloadSingleFile(azureDownloadFile);
+
+            if (downloadFileResult.IsSuccess)
+            {
+                string[] subFolders = halfPath.Split('/');
+
+                string newPath1 = "Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/";
+
+                AzureMoveSingleFilesDto azureMoveSingleFiles = new AzureMoveSingleFilesDto()
+                {
+                    ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                    SourceFileName = Path.GetFileName(document.FilePath),
+                    DestinationFileName = document.FileName,
+                    SourceFolder = Path.GetDirectoryName(document.FilePath),
+                    DestinationFolder = newPath1
+                };
+                bLAzureCommonAPI.MoveSingleFile(azureMoveSingleFiles);
+                document.FilePath = "Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + document.FileName;
+
+            }
+            _documentRepository.DeleteDocument(document.DocumentId, document.FilePath, true);
+
+            foreach (var contractorDocument in contractorDocuments)
+            {
+                string contractorDocumentHalfPath = contractorDocument.FilePath.Remove(0, 19).ToString();
+                contractorDocument.FilePath = contractorDocument.FilePath.Replace(Decrypt(generalConfiguration.APIUrl), "~");
+                AzureDownloadSingleFileDto azureDownloadFile1 = new AzureDownloadSingleFileDto()
+                {
+                    ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                    Path = contractorDocument.FilePath
+                };
+                var downloadFileResult1 = bLAzureCommonAPI.DownloadSingleFile(azureDownloadFile1);
+                if (downloadFileResult1.IsSuccess)
+                {
+                    contractorDocumentHalfPath = contractorDocumentHalfPath.Replace("\\", "/");
+                    string[] subFolders = contractorDocumentHalfPath.Split('/');
+                    string newPath = "Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + subFolders[4] + "/";
+
+                    AzureMoveSingleFilesDto azureMoveSingleFiles = new AzureMoveSingleFilesDto()
+                    {
+                        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                        SourceFileName = Path.GetFileName(contractorDocument.FilePath),
+                        DestinationFileName = contractorDocument.FileName,
+                        SourceFolder = Path.GetDirectoryName(contractorDocument.FilePath),
+                        DestinationFolder = newPath
+                    };
+                    bLAzureCommonAPI.MoveSingleFile(azureMoveSingleFiles);
+                    contractorDocument.FilePath = "Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + subFolders[4] + "/" + contractorDocument.FileName;
+                }
+
+                _documentRepository.DeleteDocument(contractorDocument.DocumentContractorDetailId, contractorDocument.FilePath, false);
+            }
+
+            CommonNoteDto note = new CommonNoteDto()
+            {
+                TableName = EnumExtention.ToDictionary(NoteTables.DocumentNote),
+                Browser = GetBrowser(),
+                IP = GetIPAddress(),
+                OS = GetOS(),
+                Notes = "Delete All Document",
+                Id = documentId,
+                CreatedBy = _commonService.GetUserId(),
+                Subject = "Delete All Document"
+            };
+
+            _commonService.SaveNotes(note);
+
+            scope.Complete();
+            scope.Dispose();
+        }
+        return _commonService.ReturnResponse(true, true, "Document deleted successfully.");
+    }
+    else
+    {
+        using (TransactionScope scope = new TransactionScope())
+        {
+            var generalConfiguration = _commonService.GetGeneralConfiguration();
+            var document = _documentRepository.GetDocument(documentId);
+            var contractorDocuments = _documentRepository.GetDocumentContractorDetail(documentId);
+
+            string halfPath = document.FilePath.Remove(0, 19).ToString();
+            document.FilePath = HttpContext.Current.Server.MapPath(document.FilePath.Replace(Decrypt(generalConfiguration.APIUrl), "~"));
+
+            if (Directory.Exists(Path.GetDirectoryName(document.FilePath)))
+            {
+                string[] subFolders = halfPath.Split('/');
+                string newPath = HttpContext.Current.Server.MapPath("~/Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/");
+                CreateFolderIfNeeded(newPath);
+                File.Move(document.FilePath, newPath + document.FileName);
+                document.FilePath = "~/Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + document.FileName;
+            }
+
+            _documentRepository.DeleteDocument(document.DocumentId, document.FilePath, true);
+
+            foreach (var contractorDocument in contractorDocuments)
+            {
+                string contractorDocumentHalfPath = contractorDocument.FilePath.Remove(0, 19).ToString();
+                contractorDocument.FilePath = HttpContext.Current.Server.MapPath(contractorDocument.FilePath.Replace(Decrypt(generalConfiguration.APIUrl), "~"));
+                if (Directory.Exists(Path.GetDirectoryName(contractorDocument.FilePath)))
+                {
+                    contractorDocumentHalfPath = contractorDocumentHalfPath.Replace("\\", "/");
+                    string[] subFolders = contractorDocumentHalfPath.Split('/');
+                    string newPath = HttpContext.Current.Server.MapPath("~/Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + subFolders[4] + "/");
+                    CreateFolderIfNeeded(newPath);
+                    File.Move(contractorDocument.FilePath, newPath + contractorDocument.FileName);
+                    contractorDocument.FilePath = "~/Upload/ArchivedDocument/" + subFolders[0] + "/" + subFolders[1] + "/" + subFolders[2] + "/" + subFolders[3] + "/" + subFolders[4] + "/" + contractorDocument.FileName;
+                }
+
+                _documentRepository.DeleteDocument(contractorDocument.DocumentContractorDetailId, contractorDocument.FilePath, false);
+            }
+
+            CommonNoteDto note = new CommonNoteDto()
+            {
+                TableName = EnumExtention.ToDictionary(NoteTables.DocumentNote),
+                Browser = GetBrowser(),
+                IP = GetIPAddress(),
+                OS = GetOS(),
+                Notes = "Delete All Document",
+                Id = documentId,
+                CreatedBy = _commonService.GetUserId(),
+                Subject = "Delete All Document"
+            };
+
+            _commonService.SaveNotes(note);
+
+            scope.Complete();
+            scope.Dispose();
+        }
+        return _commonService.ReturnResponse(true, true, "Document deleted successfully.");
+    }
+
+}
+
+write same azure remove logic for below mention code -
+
+ private void RemoveTemplateAttachment(Int16 attachmentId, short templateId)
+ {
+     TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto();
+     attachmentDto.TemplateId = templateId;
+     attachmentDto.TemplateAttachmentId = Convert.ToInt16(attachmentId);
+
+     var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+     var attachment = templateAttachments.Where(t => t.TemplateAttachmentId == attachmentId).FirstOrDefault();
+
+
+     var folderPath = HttpContext.Current.Server.MapPath(attachment.FilePath);
+     if (Directory.Exists(Path.GetDirectoryName(folderPath)))
+     {
+         Directory.Delete(Path.GetDirectoryName(folderPath), true);
+     }
+
+     Int16 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+
+ }
