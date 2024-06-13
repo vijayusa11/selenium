@@ -1,0 +1,146 @@
+private void SaveTemplateAttachment(HttpRequest templateAttachmentRequest, Int16 templateId, bool isEdit)
+{
+    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+    {
+        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+        if (templateAttachmentRequest.Files.Count > 0)
+        {
+            for (int i = 0; i < templateAttachmentRequest.Files.AllKeys.Length; i++)
+            {
+                HttpPostedFile attachmentFile = templateAttachmentRequest.Files[i];
+                if (attachmentFile != null)
+                {
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto()
+                    {
+                        TemplateId = templateId,
+                        TemplateAttachmentId = 0,
+                        FileName = attachmentFile.FileName,
+                        FilePath = Path.Combine("Upload/Template/" + Datefolderpath + templateId, attachmentFile.FileName),
+                    };
+                    Int32 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+
+                    var folderPath = "Upload/Template/" + Datefolderpath + templateId + "/" + templateAttachmentId;
+
+                    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                    {
+                        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                        FileName = attachmentFile.FileName,
+                        SavePath = folderPath,
+                        FileBytes = bLAzureCommonAPI.ConvertStreamToByte(attachmentFile.InputStream, attachmentFile.ContentLength),
+                    };
+                    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+                }
+            }
+        }
+
+        if (isEdit)
+        {
+            string attachmentIds = templateAttachmentRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                string[] arr = attachmentIds.Split(',');
+                foreach (var item in arr)
+                {
+                    RemoveTemplateAttachment(Convert.ToInt16(item), templateId);
+                }
+            }
+        }
+    }
+    else
+    {
+        if (templateAttachmentRequest.Files.Count > 0)
+        {
+            for (int i = 0; i < templateAttachmentRequest.Files.AllKeys.Length; i++)
+            {
+                HttpPostedFile attachmentFile = templateAttachmentRequest.Files[i];
+                if (attachmentFile != null)
+                {
+                    string Datefolderpath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+                    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto()
+                    {
+                        TemplateId = templateId,
+                        TemplateAttachmentId = 0,
+                        FileName = attachmentFile.FileName,
+                        FilePath = Path.Combine("~/Upload/Template/" + Datefolderpath + templateId, attachmentFile.FileName),
+                    };
+                    Int32 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+                    var folderPath = HttpContext.Current.Server.MapPath("~//Upload/Template/" + Datefolderpath + templateId + "/" + templateAttachmentId);
+                    CreateFolderIfNeeded(folderPath);
+                    attachmentFile.SaveAs(Path.Combine(folderPath, attachmentFile.FileName));
+                }
+            }
+        }
+
+        if (isEdit)
+        {
+            string attachmentIds = templateAttachmentRequest["attachmentIds"];
+            if (!String.IsNullOrEmpty(attachmentIds))
+            {
+                string[] arr = attachmentIds.Split(',');
+                foreach (var item in arr)
+                {
+                    RemoveTemplateAttachment(Convert.ToInt16(item), templateId);
+                }
+            }
+        }
+    }
+}
+
+
+Below method not able to find the path so please correct below method
+
+ private void RemoveTemplateAttachment(Int16 attachmentId, short templateId)
+ {
+     TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto();
+     attachmentDto.TemplateId = templateId;
+     attachmentDto.TemplateAttachmentId = Convert.ToInt16(attachmentId);
+
+     var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+     var attachment = templateAttachments.Where(t => t.TemplateAttachmentId == attachmentId).FirstOrDefault();
+
+     if (attachment != null)
+     {
+         if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+         {
+             // Azure Storage Deletion
+             BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+             AzureDeleteSingleFileDto azureDeleteSingleFile = new AzureDeleteSingleFileDto()
+             {
+                 ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                 Path = attachment.FilePath + "/" + attachment.FileName
+             };
+             var deleteResult = bLAzureCommonAPI.DeleteSingleFile(azureDeleteSingleFile);
+
+             if (deleteResult.IsSuccess)
+             {
+                 Int16 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+             }
+             else
+             {
+                 // Handle deletion failure
+                 throw new Exception("Failed to delete the file from Azure storage.");
+             }
+         }
+         else
+         {
+             // Local Storage Deletion
+             var folderPath = HttpContext.Current.Server.MapPath(attachment.FilePath);
+             if (Directory.Exists(Path.GetDirectoryName(folderPath)))
+             {
+                 Directory.Delete(Path.GetDirectoryName(folderPath), true);
+                 Int16 templateAttachmentId = _templateRepository.SaveTemplateAttachment(attachmentDto);
+             }
+             else
+             {
+                 // Handle directory not existing
+                 throw new Exception("Directory does not exist.");
+             }
+         }
+     }
+     else
+     {
+         // Handle attachment not found
+         throw new Exception("Attachment not found.");
+     }
+ }
