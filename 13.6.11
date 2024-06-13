@@ -1,0 +1,44 @@
+public ResponseModel<bool> SaveTemplate(HttpRequest templateModel)
+{
+    using (TransactionScope scope = new TransactionScope())
+    {
+        TemplateModel model = new TemplateModel();
+        TemplateDto template = new TemplateDto();
+        template.TemplateId = Convert.ToInt16(templateModel["TemplateId"].ToString());
+        template.TemplateSubject = templateModel["TemplateSubject"].ToString();
+        template.TemplateBody = templateModel.Unvalidated["TemplateBody"].ToString();
+        template.IsActive = Convert.ToBoolean(templateModel["IsActive"].ToString());
+        template.CreatedBy = Convert.ToInt32(templateModel["CreatedBy"].ToString());
+        model.NewTemplate = template;
+
+        if (templateModel["OldTemplateId"] != null || templateModel["OldTemplateSubject"] != null || templateModel["OldTemplateBody"] != null || templateModel["OldIsActive"] != null || templateModel["OldCreatedBy"] != null)
+        {
+            TemplateDto oldtemplate = new TemplateDto
+            {
+                TemplateId = Convert.ToInt16(templateModel["OldTemplateId"].ToString()),
+                TemplateSubject = templateModel["OldTemplateSubject"].ToString(),
+                TemplateBody = templateModel.Unvalidated["OldTemplateBody"].ToString(),
+                IsActive = Convert.ToBoolean(templateModel["OldIsActive"].ToString()),
+                CreatedBy = Convert.ToInt32(templateModel["OldCreatedBy"].ToString())
+            };
+            model.OldTemplate = oldtemplate;
+        }
+        bool isEdit = false;
+        if (template.TemplateId > 0)
+        {
+            isEdit = true;
+        }
+
+        Int16 templateId = _templateRepository.SaveTemplate(template);
+
+        SaveTemplateAttachment(templateModel, templateId, isEdit);
+        AddTemplateNote(model, templateId);
+
+        scope.Complete();
+        scope.Dispose();
+
+        return _commonService.ReturnResponse(true, true, template.TemplateId == 0 ? "Template saved successfully." : "Template updated successfully.");
+    }
+}
+
+as per another want to save template into azure and local both
