@@ -1,0 +1,79 @@
+To implement similar Azure remove logic for the `RemoveTemplateAttachment` method, we need to handle both Azure and local storage scenarios. The approach is similar to the one used in `DeleteDocument`. Here's the updated `RemoveTemplateAttachment` method:
+
+```csharp
+private void RemoveTemplateAttachment(short attachmentId, short templateId)
+{
+    TemplateAttachmentDto attachmentDto = new TemplateAttachmentDto
+    {
+        TemplateId = templateId,
+        TemplateAttachmentId = attachmentId
+    };
+
+    var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+    var attachment = templateAttachments.FirstOrDefault(t => t.TemplateAttachmentId == attachmentId);
+
+    if (attachment == null)
+    {
+        throw new Exception("Attachment not found.");
+    }
+
+    if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+    {
+        // Azure-specific logic
+        BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+
+        AzureDownloadSingleFileDto azureDownloadFile = new AzureDownloadSingleFileDto
+        {
+            ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+            Path = attachment.FilePath
+        };
+        var downloadFileResult = bLAzureCommonAPI.DownloadSingleFile(azureDownloadFile);
+
+        if (downloadFileResult.IsSuccess)
+        {
+            string[] subFolders = attachment.FilePath.Split('/');
+            string newPath = $"Upload/ArchivedTemplateAttachment/{subFolders[0]}/{subFolders[1]}/{subFolders[2]}/{subFolders[3]}/";
+
+            AzureMoveSingleFilesDto azureMoveSingleFiles = new AzureMoveSingleFilesDto
+            {
+                ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"].ToString(),
+                SourceFileName = Path.GetFileName(attachment.FilePath),
+                DestinationFileName = attachment.FileName,
+                SourceFolder = Path.GetDirectoryName(attachment.FilePath),
+                DestinationFolder = newPath
+            };
+            bLAzureCommonAPI.MoveSingleFile(azureMoveSingleFiles);
+
+            attachment.FilePath = $"Upload/ArchivedTemplateAttachment/{subFolders[0]}/{subFolders[1]}/{subFolders[2]}/{subFolders[3]}/{attachment.FileName}";
+        }
+
+        _templateRepository.SaveTemplateAttachment(attachmentDto);
+    }
+    else
+    {
+        // Local storage logic
+        var folderPath = HttpContext.Current.Server.MapPath(attachment.FilePath);
+        if (Directory.Exists(Path.GetDirectoryName(folderPath)))
+        {
+            Directory.Delete(Path.GetDirectoryName(folderPath), true);
+        }
+
+        _templateRepository.SaveTemplateAttachment(attachmentDto);
+    }
+}
+```
+
+### Explanation:
+1. **Retrieving Attachment**: The code retrieves the attachment details from the repository and ensures the attachment exists before proceeding.
+
+2. **Azure-Specific Logic**:
+    - **Download File**: It tries to download the file from Azure using the `AzureDownloadSingleFileDto`.
+    - **Move File**: If the download is successful, it constructs the new path and moves the file to the "Archived" directory using `AzureMoveSingleFilesDto`.
+    - **Update FilePath**: It updates the file path to reflect the new location in the "Archived" directory.
+    - **Save Attachment**: Finally, it saves the attachment details in the repository.
+
+3. **Local Storage Logic**:
+    - **Delete Directory**: It deletes the directory where the attachment is stored.
+    - **Save Attachment**: It saves the attachment details in the repository.
+
+This code ensures that attachments are handled correctly based on the configuration setting, either using Azure storage or local storage.
