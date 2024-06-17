@@ -1,0 +1,227 @@
+The error you're encountering is because the method `ProcessFiles` is expecting a `List<FileInfo>` but it seems to be receiving a `List<string>` instead. Let's correct the types and ensure proper handling.
+
+Below are the methods including `ProcessFiles`, `CreateHeaderRow`, and `ProcessDataRows` along with necessary modifications:
+
+### `ProcessFiles` Method
+Make sure this method accepts a `List<FileInfo>` and calls `ProcessFile` appropriately.
+
+```csharp
+private void ProcessFiles(List<FileInfo> fileList)
+{
+    try
+    {
+        var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Global".ToUpper()) && IsCsvFile(t));
+        ProcessFile(dailyActivityFile, dailyActivitySheetName, "Daily Activity file not found.");             
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### `ProcessFile` Method
+Make sure this method processes the file correctly.
+
+```csharp
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    try
+    {
+        if (file != null)
+        {
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+            if (fileNameWithoutExtension.Contains("Global"))
+            {
+                dailyActivitySheetName = fileNameWithoutExtension;
+            }
+
+            if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+            {
+                CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+            }
+        }
+        else
+        {
+            LogToErrorFile(notFoundMessage);
+            Console.WriteLine(notFoundMessage);
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+```
+
+### `CreateExcelForDailyPatientSiteFile` Method
+Ensures the Excel file creation process and data loading.
+
+```csharp
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+{
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = string.Empty;
+
+            if (aAPCSRFile != null)
+            {
+                sourcefile = aAPCSRFile.ToString();
+            }
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (sheetName != null)
+            {
+                ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (sourcefile != string.Empty)
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+                if (sheetName != string.Empty)
+                {
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                }
+                else
+                {
+                    StartConsoleWriting("...File Not Found...!");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+    return "";
+}
+```
+
+### `CreateHeaderRow` Method
+Creates the header row in the Excel sheet.
+
+```csharp
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+        
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### `ProcessDataRows` Method
+Processes each data row from the CSV file and inserts it into the Excel sheet.
+
+```csharp
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Assuming the CSV has 4 columns in the specified order
+        if (valueLines.Length >= 4)
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Parse("22-04-2024"));
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[0]);
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[1]);
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[7]); // Assuming the 8th column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### `LoadDailyPatientSiteCsvData` Method
+Loads the CSV data and processes it.
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+```
+
+### Summary
+- **CreateHeaderRow**: Creates the header row.
+- **ProcessDataRows**: Processes each data row and adds it to the sheet.
+- **LoadDailyPatientSiteCsvData**: Loads the CSV file, calls `CreateHeaderRow` and `ProcessDataRows` for each row in the CSV file.
+
+Ensure the code changes are applied correctly and any other necessary adjustments to your project are made to accommodate these methods. This should resolve the issue and meet the requirements specified.
