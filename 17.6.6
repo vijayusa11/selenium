@@ -1,0 +1,89 @@
+Certainly! Here is the complete code for the `CreateHeaderRow` method that will create the header row in your Excel sheet with the specified columns: "Date", "Agent", "TimesheetOwner", and "Total Talking time".
+
+### `CreateHeaderRow` Method
+This method will add the headers to the first row of the sheet.
+
+```csharp
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+        
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Explanation
+
+- **Create a Header Row**: This code creates a new row at the top of the sheet for the header using `sheet.CreateRow(0)`.
+- **Define Headers**: The headers are defined in the `headers` array.
+- **Loop Through Headers**: The code loops through the `headers` array, creates a cell for each header in the `headerRow`, sets the header text with `cell.SetCellValue(headers[i])`, and applies the given style with `cell.CellStyle = style`.
+
+### Integration with Your Code
+
+Ensure the `CreateHeaderRow` method is part of your `WebScraping` class and call it in the `LoadDailyPatientSiteCsvData` method. Below is how you might integrate it:
+
+### Example of Calling `CreateHeaderRow`
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+```
+
+Make sure you have the `LogToErrorFile` and `StartConsoleWriting` methods implemented to handle logging and console output as indicated in your initial code.
+
+This setup will ensure that when you process your CSV file, the header row will be created correctly at the top of your Excel sheet, and subsequent data rows will be processed accordingly.
