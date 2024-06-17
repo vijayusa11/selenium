@@ -1,0 +1,96 @@
+To create the local folder storage in the `else` part where `Azure_Attachment` is false, you can enhance the `else` block to handle folder creation and file copying. Here's how you can modify the code:
+
+```csharp
+string attachmentIds = emailNoteRequest["attachmentIds"];
+if (!String.IsNullOrEmpty(attachmentIds))
+{
+    Int16 templateId = Convert.ToInt16(emailNoteRequest["TemplateId"].ToString());
+    var templateAttachments = _templateRepository.GetTemplateAttachment(templateId);
+    string[] arr = attachmentIds.Split(',');
+
+    foreach (var item in arr)
+    {
+        var attachments = templateAttachments.Find(t => t.TemplateAttachmentId == Convert.ToInt16(item));
+        if (attachments != null)
+        {
+            string dateFolderPath = DateTime.Now.Year + "/" + DateTime.Now.Month + "/" + DateTime.Now.Day + "/";
+            string filePath = "Upload/ContractorEmailNote/" + dateFolderPath + emailNoteId.ToString() + "/";
+
+            EmailNoteAttachmentDto emailNoteAttachment = new EmailNoteAttachmentDto()
+            {
+                EmailNoteAttachmentId = 0,
+                EmailNoteId = emailNoteId,
+                FileName = attachments.FileName,
+                FilePath = filePath
+            };
+            // In sp EmailAttachmentId is added after the filepath.
+            Int64 attachmentId = _commonService.SaveEmailNoteAttachment(emailNoteAttachment);
+
+            string folderPath = HttpContext.Current.Server.MapPath(filePath + attachmentId.ToString());
+            CreateFolderIfNeeded(folderPath);
+
+            if (File.Exists(HttpContext.Current.Server.MapPath(attachments.FilePath)))
+            {
+                if (ConfigurationManager.AppSettings["Azure_Attachment"] == "1")
+                {
+                    // Azure Storage
+                    BLAzureCommonAPI bLAzureCommonAPI = new BLAzureCommonAPI();
+                    string filename11 = "UploadedFiles/" + _commonService.GetUserId().ToString();
+                    AzureSaveSingleFileDto azureSaveSingleFile = new AzureSaveSingleFileDto()
+                    {
+                        ProjectCode = ConfigurationManager.AppSettings["Azure_Project_Code"],
+                        FileName = attachments.FileName,
+                        SavePath = filename11,
+                        FileBytes = bLAzureCommonAPI.ConvertFilePathToByte(HttpContext.Current.Server.MapPath(attachments.FilePath), true)
+                    };
+                    bLAzureCommonAPI.SaveSingleFile(azureSaveSingleFile);
+
+                    sendAttachment.Add(new Attachments()
+                    {
+                        FileName = attachments.FileName,
+                        FilePath = filename11 + "/" + attachments.FileName
+                    });
+                }
+                else
+                {
+                    // Local Storage
+                    // Ensure the folder structure is created
+                    string localFolderPath = Path.Combine(folderPath, emailNoteAttachment.EmailNoteAttachmentId.ToString());
+                    CreateFolderIfNeeded(localFolderPath);
+
+                    // Copy the file to the new location
+                    string localFilePath = Path.Combine(localFolderPath, attachments.FileName);
+                    System.IO.File.Copy(HttpContext.Current.Server.MapPath(attachments.FilePath), localFilePath, true);
+
+                    sendAttachment.Add(new Attachments()
+                    {
+                        FileName = attachments.FileName,
+                        FilePath = localFilePath
+                    });
+                }
+            }
+        }
+    }
+}
+
+// Helper method to create directory if it does not exist
+void CreateFolderIfNeeded(string path)
+{
+    if (!Directory.Exists(path))
+    {
+        Directory.CreateDirectory(path);
+    }
+}
+```
+
+Here's a summary of the changes and additions:
+
+1. **Moved the `if (File.Exists(HttpContext.Current.Server.MapPath(attachments.FilePath)))` check outside of the Azure and local storage conditions to avoid redundancy.**
+2. **Added an `if-else` condition to check the value of `ConfigurationManager.AppSettings["Azure_Attachment"]`.**
+3. **Included Azure Storage logic inside the `if` block when `Azure_Attachment` is `1`.**
+4. **Handled Local Storage inside the `else` block:**
+    - **Ensured the folder structure is created using `CreateFolderIfNeeded`.**
+    - **Copied the file to the new location using `System.IO.File.Copy`.**
+    - **Stored the new local file path in `sendAttachment`.**
+
+This refactored code ensures the correct storage mechanism is used based on the configuration setting.
