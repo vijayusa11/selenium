@@ -1,0 +1,221 @@
+Input -
+"1000 Spare 		0	0	0	0	0	0	00:00:00"
+"1001 James Blackburn		0	0	0	0	0	0	00:00:00"
+
+
+Output -
+Date 	Agent	TimesheetOwner	Total Talking time
+22-04-2024	1000	Jonathan Brown	00:00:00
+22-04-2024	1001	James Blackburn	00:12:09
+
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("mmm-yy"));
+
+        XSSFCellStyle numberStyle2 = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle2.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("General"));
+
+        XSSFCellStyle numberStyle3 = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle3.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("dd-mm-yyyy"));
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters(",");
+
+            var (rowIndex, columnSeprated, columnG, columnH, columnJ, columnK, columnL, columnI, columnM, columnN, columnO, columnP, columnQ, columnR, columnS, columnT, columnU, columnV, columnW, columnX) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+            while (!reader.EndOfData)
+            {
+                var value_lines = reader.ReadFields();
+                int startColumnIndex = 0;
+                int[] intArray;
+
+                if (rowIndex == 0 && value_lines != null)
+                {
+                    int endColumnIndex = Math.Min(25, value_lines.Length - 1);
+
+                    if (sheetName == dailyActivitySheetName)
+                    {
+                        for (int i = 0; i <= endColumnIndex; i++)
+                        {
+                            string value = value_lines[i].ToString().Trim();
+
+                             if (sheetName == dailyActivitySheetName)
+                            {
+                                switch (value.ToUpper().Replace(" ", ""))
+                                {
+                                    case "LOCATION": columnG = i; break;
+                                    case "ENDOSCOPIST'SDETAILS": columnH = i; break;
+                                    case "ROOM": columnI = i; break;
+                                    case "SESSION": columnJ = i; break;
+                                    case "GMCNUMBER": columnK = i; break;
+                                    case "NURSE1": columnM = i; break;
+                                    case "NURSE2": columnN = i; break;
+                                    case "DATE": columnU = i; break;
+                                    case "ACTIVITIES": columnSeprated = i; break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                intArray = sheetName switch
+                {
+                    string s when s == dailyActivitySheetName => new int[] { columnG, columnH, columnI, columnJ, columnK, columnM, columnN, columnU, columnSeprated },
+                    _ => new int[0] //default case
+                };
+
+                if (intArray.Length > 0)
+                {
+                    if (rowIndex == 0)
+                    {
+                        CreateHeaderRow(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2);
+                    }
+                    else
+                    {
+                        ProcessDataRows(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2, numberStyle3);
+                    }
+
+                    rowIndex = (rowIndex == 0) ? 1 : rowIndexColumn;
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, XSSFCellStyle numberStyle2)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+        foreach (int i in intArray)
+        {
+            if (i != columnSeprated)
+            {
+                dataRow.CreateCell(startColumnIndex).SetCellValue(value_lines[i].ToString());
+                ICell newCell1 = dataRow.GetCell(startColumnIndex);//N
+                newCell1.CellStyle = numberStyle2;
+                startColumnIndex++;
+            }
+            else
+            {
+                string[] activityAnotherColumn = { };
+
+                if (sheetName == dailyActivitySheetName)
+                {
+                    activityAnotherColumn = new string[] { "NHS Number", "Planned Procedure", "Outcome", "MDT", "Specimen Taken", "D2 Intubation", "CLO Test", "Caecal Intubation", "Polypectomy", "Withdrawal Time", "Follow-Up Required", "Referral Made" };
+                }
+
+                foreach (string items in activityAnotherColumn)
+                {
+                    dataRow.CreateCell(startColumnIndex).SetCellValue(items);
+                    ICell newCell1 = dataRow.GetCell(startColumnIndex);
+                    newCell1.CellStyle = numberStyle2;
+                    startColumnIndex++;
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, XSSFCellStyle numberStyle2, XSSFCellStyle numberStyle3)
+{
+    try
+    {
+        string[] values = value_lines[columnSeprated].ToString().Split('\n').Select(sValue => sValue.Trim()).ToArray();
+
+        if (values.Length > 0)
+        {
+            foreach (string valueItem in values)
+            {
+                var dataRow1 = sheet.CreateRow(rowIndex);
+
+                string[] calData = valueItem.Split(':').Select(sValue => sValue.Trim()).ToArray();
+
+                int createIndexCell = 0;
+
+                foreach (int i in intArray)
+                {
+                    if (i != columnSeprated)
+                    {
+                        if (DateTime.TryParse(value_lines[i], out DateTime dateValue))
+                        {
+                            dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                            newCell1.CellStyle = numberStyle3;
+                            createIndexCell++;
+                        }
+                        else if (double.TryParse(value_lines[i], out double intValue))
+                        {
+                            dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                            newCell1.CellStyle = numberStyle2;
+                            createIndexCell++;
+                        }
+                        else
+                        {
+                            dataRow1.CreateCell(createIndexCell).SetCellValue(value_lines[i].ToString());
+                            ICell newCell1 = dataRow1.GetCell(createIndexCell);//N
+                            newCell1.CellStyle = numberStyle2;
+                            createIndexCell++;
+                        }
+                    }
+                    else
+                    {
+                        if (calData.Length > 0)
+                        {
+                            foreach (string value in calData)
+                            {
+
+                                if (DateTime.TryParse(value, out DateTime dateValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle3;
+                                    createIndexCell++;
+                                }
+                                else if (double.TryParse(value, out double intValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                                else
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(value.ToString());
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                            }
+                        }
+                    }
+                }
+                rowIndex++;
+
+                rowIndexColumn = rowIndex;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+
+}
+
+above is example of other code and i want to make excel bot in .net core 6.0
