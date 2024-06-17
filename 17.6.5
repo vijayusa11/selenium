@@ -1,0 +1,132 @@
+To accomplish this, we will need to modify the `LoadDailyPatientSiteCsvData`, `CreateHeaderRow`, and `ProcessDataRows` methods to handle the input data and produce the desired output format. Below is the modified code:
+
+### Modified `LoadDailyPatientSiteCsvData` Method
+This method reads the CSV data, creates the sheet, and populates it with the required information.
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+```
+
+### Modified `CreateHeaderRow` Method
+This method creates the header row with the specified columns.
+
+```csharp
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        var headerRow = sheet.CreateRow(0);
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]);
+            cell.CellStyle = style;
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+```
+
+### Modified `ProcessDataRows` Method
+This method processes each row of data and adds it to the sheet in the correct format.
+
+```csharp
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Assuming all entries have the same date, replace with actual date if available
+        DateTime date = DateTime.ParseExact("22-04-2024", "dd-MM-yyyy", null);
+        string agent = valueLines[0];
+        string timesheetOwner = valueLines[1];
+        string totalTalkingTime = valueLines[7];
+
+        dataRow.CreateCell(0).SetCellValue(date);
+        dataRow.GetCell(0).CellStyle = dateStyle;
+
+        dataRow.CreateCell(1).SetCellValue(agent);
+        dataRow.GetCell(1).CellStyle = numberStyle;
+
+        dataRow.CreateCell(2).SetCellValue(timesheetOwner);
+        dataRow.GetCell(2).CellStyle = numberStyle;
+
+        dataRow.CreateCell(3).SetCellValue(totalTalkingTime);
+        dataRow.GetCell(3).CellStyle = numberStyle;
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+```
+
+### Integration with the rest of your code
+Ensure the above methods are part of your `WebScraping` class. The main process flow should call `LoadDailyPatientSiteCsvData` method after setting up the workbook and sheet.
+
+### Example of calling the method
+Make sure to call the `LoadDailyPatientSiteCsvData` method with appropriate parameters.
+
+```csharp
+public void ProcessFiles(List<string> myDataEntryList)
+{
+    foreach (var filePath in myDataEntryList)
+    {
+        using (FileStream fs = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+        {
+            XSSFWorkbook workbook = new XSSFWorkbook();
+            ISheet sheet = workbook.CreateSheet(dailyActivitySheetName);
+
+            LoadDailyPatientSiteCsvData(filePath, sheet, workbook, dailyActivitySheetName);
+
+            workbook.Write(fs);
+        }
+    }
+}
+```
+
+By modifying the methods as shown above, you will be able to process the input data, read from a single column, and produce the desired output format in columns from A to D in your Excel sheet.
