@@ -8,6 +8,52 @@ Date 	Agent	TimesheetOwner	Total Talking time
 22-04-2024	1000	Jonathan Brown	00:00:00
 22-04-2024	1001	James Blackburn	00:12:09
 
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+{
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = string.Empty;
+
+            if (aAPCSRFile != null)
+            {
+                sourcefile = aAPCSRFile.ToString();
+            }
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (sheetName != null)
+            {
+                ISheet wb = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (sourcefile != string.Empty)
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, wb, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+                if (sheetName != string.Empty)
+                {
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                }
+                else
+                {
+                    StartConsoleWriting("...File Not Found...!");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+    return "";
+}
+
 public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
 {
     try
