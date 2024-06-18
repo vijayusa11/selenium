@@ -1,0 +1,9 @@
+Type: Extension Statistic Report								
+From 6/4/2024 12:00:00 AM To 6/4/2024 11:59:59 PM								
+Agent Extension: Any number								
+								
+Agent Extension		Inbound		Outbound		Total		Total Talking time
+		Answered	Unanswered	Answered	Unanswered	Answered	Unanswered	
+1000 Spare 		0	0	0	0	0	0	00:00:00
+
+want to remove unwated text before Agent column 1000 
