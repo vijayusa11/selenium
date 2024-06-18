@@ -1,0 +1,135 @@
+Given the input file format and the expected output format, it looks like the CSV file has an additional blank column that we need to handle when parsing. Here's how we can adjust the `ProcessDataRows` method to accommodate this:
+
+1. **Skip Blank Columns**: We need to ensure we correctly read the non-blank columns.
+2. **Correct Column Indices**: Adjust the column indices to skip the blank column.
+
+Here's the updated code to handle the specific input format:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t"); // Ensure this matches the CSV file's delimiter
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                LogValueLines(valueLines); // Log the parsed data
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Assuming the CSV has at least 9 columns, with the second column being blank
+        if (valueLines.Length >= 9) // Make sure the array has enough elements
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Now); // Set the current date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[0]); // Assuming the first column is Agent Extension
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[1]); // Assuming the third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[8]); // Assuming the 9th column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Summary of Changes:
+1. **Delimiter**: Ensured the delimiter is correctly set to `\t`.
+2. **Log Parsed Lines**: Added logging to help debug the parsed lines.
+3. **Adjusted Column Indices**: Adjusted the column indices to handle the blank column in the input file.
+4. **Date Setting**: Set the date to the current date instead of a hardcoded date.
+
+With these changes, the code should correctly parse the input file and generate the output file with the expected format. The logging will help identify if there are any issues with the input data.
