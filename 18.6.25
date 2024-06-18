@@ -1,0 +1,148 @@
+To handle the unwanted text before the "Agent Extension" column, you can add logic to skip lines until you reach the relevant data. This can be done by looking for a specific keyword or structure in the data that indicates the start of the relevant rows.
+
+Here is how you can modify the `LoadDailyPatientSiteCsvData` method to skip unwanted text before processing the actual data:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+            bool isDataSection = false;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+
+                // Check for the start of the data section
+                if (!isDataSection)
+                {
+                    // Assuming "Agent Extension" is the marker for the start of the data section
+                    if (valueLines.Length > 0 && valueLines[0] == "Agent Extension")
+                    {
+                        // Skip two additional lines after the header
+                        reader.ReadLine();
+                        reader.ReadLine();
+                        isDataSection = true;
+                    }
+                    continue;
+                }
+
+                LogValueLines(valueLines); // Log the parsed data
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Ensure the row has enough columns
+        if (valueLines.Length >= 9) // Make sure the array has enough elements, accounting for the blank column
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Now); // Set the current date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[8]); // Ninth column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+
+            // Log what was written to the row
+            LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[8]}");
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Summary of Changes:
+1. **Skip Unwanted Text**: Added logic to skip lines until the "Agent Extension" header is found.
+2. **Skip Additional Lines**: Added logic to skip the two lines immediately following the header line.
+3. **Ensure Correct Parsing**: Adjusted the condition to ensure
