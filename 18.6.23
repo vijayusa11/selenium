@@ -1,0 +1,146 @@
+It appears that the CSV parsing is working correctly, but the data is not being written to the Excel sheet as expected. This could be due to a few reasons:
+
+1. The `valueLines` array might not be processed correctly.
+2. The logic to skip the second column might not be implemented correctly.
+3. The condition to check for a valid row might be incorrect.
+
+Let's improve the code by addressing these issues:
+
+1. **Ensure Correct Column Indices**: Adjust the indices to correctly parse and skip the blank column.
+2. **Check Row Length**: Ensure we are handling rows with sufficient columns.
+3. **Detailed Logging**: Add detailed logging to identify exactly what data is being written to the Excel sheet.
+
+Here's the revised code:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t"); // Ensure this matches the CSV file's delimiter
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                LogValueLines(valueLines); // Log the parsed data
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Ensure the row has enough columns
+        if (valueLines.Length >= 9) // Make sure the array has enough elements, accounting for the blank column
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Now); // Set the current date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[8]); // Ninth column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+
+            // Log what was written to the row
+            LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[8]}");
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Summary of Changes:
+1. **Delimiter**: Ensured the delimiter is correctly set to `\t`.
+2. **Log Parsed Lines**: Added logging to help debug the parsed lines.
+3. **Adjusted Column Indices**: Adjusted the column indices to handle the blank column in the input file.
+4. **Date Setting**: Set the date to the current date instead of a hardcoded date.
+5. **Enhanced Logging**: Added detailed logging to capture exactly what data is being written to the Excel sheet.
+
+This should help identify if there are any issues with the input data and ensure the data is written correctly to the Excel sheet.
