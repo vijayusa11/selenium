@@ -1,0 +1,177 @@
+Sure, let's continue with the remaining parts of the code from where we left off:
+
+```csharp
+        void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+        {
+            try
+            {
+                var dataRow = sheet.CreateRow(rowIndex);
+
+                // Log the length and content of valueLines
+                LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+                // Proceed with the parsing assuming we have the required data
+                var dateCell = dataRow.CreateCell(0);
+                dateCell.SetCellValue(DateTime.Now); // Set the current date
+                dateCell.CellStyle = dateStyle;
+
+                var agentCell = dataRow.CreateCell(1);
+                agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+                agentCell.CellStyle = numberStyle;
+
+                var timesheetOwnerCell = dataRow.CreateCell(2);
+                timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+                timesheetOwnerCell.CellStyle = numberStyle;
+
+                var totalTalkingTimeCell = dataRow.CreateCell(3);
+                totalTalkingTimeCell.SetCellValue(valueLines[^1]); // Last column contains the total talking time
+                totalTalkingTimeCell.CellStyle = numberStyle;
+
+                // Log what was written to the row
+                LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[^1]}");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        void LogValueLines(string[] valueLines)
+        {
+            if (valueLines != null)
+            {
+                Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+            }
+            else
+            {
+                Console.WriteLine("Parsed Line: null");
+            }
+        }
+
+        public static bool IsCsvFile(FileInfo file)
+        {
+            return file.Extension.ToUpper() == ".CSV";
+        }
+
+        public static List<FileInfo> GetSortedFileList(string directoryPath)
+        {
+            try
+            {
+                var directory = new DirectoryInfo(directoryPath);
+                return (from f in directory.GetFiles()
+                        orderby f.LastWriteTime descending
+                        select f).ToList();
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                return new List<FileInfo>(); // return an empty list in case of error
+            }
+        }
+
+        public static void StartConsoleWriting(string Message)
+        {
+            Console.WriteLine(Message);
+            System.Threading.Thread.Sleep(5000);
+        }
+
+        public static void LogToErrorFile(string ErrorMsg)
+        {
+            try
+            {
+                CreateFolderIfNeeded(errorLogFilePath);
+
+                string path = Path.Combine(errorLogFilePath, "DataEntryBOT.txt");
+
+                using (StreamWriter sw = (File.Exists(path)) ? File.AppendText(path) : File.CreateText(path))
+                {
+                    sw.WriteLine(ErrorMsg + Environment.NewLine);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public static bool CreateFolderIfNeeded(string path)
+        {
+            bool result = true;
+            if (!Directory.Exists(path))
+            {
+                try
+                {
+                    Directory.CreateDirectory(path);
+                }
+                catch (Exception)
+                {
+                    result = false;
+                }
+            }
+            return result;
+        }
+
+        public void CopyFilesFromImportDirectory(string importDirectory)
+        {
+            if (Directory.Exists(importDirectory))
+            {
+                CopyFilesRecursively(importDirectory, downloadDirectory, baseDirectory);
+            }
+        }
+
+        public static void CopyFilesRecursively(string sourcePath, string targetPath, string baseDirectory)
+        {
+            try
+            {
+                foreach (string newPath in Directory.GetFiles(sourcePath, "*.*", System.IO.SearchOption.AllDirectories))
+                {
+                    FileInfo mFile = new FileInfo(newPath);
+                    if (!new FileInfo(Path.Combine(targetPath, mFile.Name)).Exists)
+                    {
+                        mFile.CopyTo(Path.Combine(targetPath, mFile.Name));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+        }
+    }
+}
+```
+
+### Explanation:
+
+1. **ProcessDataRows Method:**
+   - This method is responsible for creating a new row in the Excel sheet (`ISheet`) and populating it with data parsed from the input CSV file (`valueLines` array).
+   - It sets up cells for various data types (date, numeric) with appropriate formatting (`dateStyle`, `numberStyle`).
+
+2. **LogValueLines Method:**
+   - A helper method to log parsed line content to the console. This can be useful for debugging and tracking data processing steps.
+
+3. **IsCsvFile Method:**
+   - Checks if a given file (`FileInfo`) has a `.CSV` extension. This is used in `ProcessFiles` to identify CSV files for processing.
+
+4. **GetSortedFileList Method:**
+   - Retrieves a sorted list of `FileInfo` objects (files) from a specified directory path (`directoryPath`). Files are sorted by `LastWriteTime` in descending order.
+
+5. **StartConsoleWriting Method:**
+   - Writes a message to the console and pauses execution for 5 seconds (`Thread.Sleep(5000)`). Useful for displaying messages during batch operations or automated tasks.
+
+6. **LogToErrorFile Method:**
+   - Logs an error message (`ErrorMsg`) to a file (`DataEntryBOT.txt`) located in the `errorLogFilePath` directory. If the file doesn't exist, it creates a new one.
+
+7. **CreateFolderIfNeeded Method:**
+   - Checks if a directory specified by `path` exists. If not, attempts to create it. Returns `true` if successful, `false` otherwise.
+
+8. **CopyFilesFromImportDirectory Method:**
+   - Copies files recursively from a source directory (`importDirectory`) to a target directory (`downloadDirectory`). It utilizes `CopyFilesRecursively` for the actual file copy operation.
+
+9. **CopyFilesRecursively Method:**
+   - Copies all files from `sourcePath` (including subdirectories) to `targetPath`. It checks if each file exists in the target directory (`targetPath`) before copying it.
+
+These methods collectively facilitate the automation of file handling, data processing, logging, and directory management as part of the phone entry process. Adjustments can be made based on specific requirements or error handling improvements as needed.
