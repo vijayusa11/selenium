@@ -1,0 +1,110 @@
+It sounds like the CSV parsing might not be reading the lines correctly, leading to fewer elements in `valueLines` than expected. Here's how you can troubleshoot and ensure that the CSV data is correctly parsed:
+
+1. **Check the Delimiter**: Ensure the delimiter used in the CSV matches what the `TextFieldParser` expects.
+2. **Log the Parsed Data**: Print or log the `valueLines` array to see what it contains.
+3. **Modify the Condition**: Ensure the condition to check the length of `valueLines` is appropriate.
+
+Here's the modified code with added logging to help debug:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t"); // Ensure this matches the CSV file's delimiter
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                LogValueLines(valueLines); // Log the parsed data
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Assuming the CSV has 4 columns in the specified order
+        if (valueLines.Length >= 8) // Make sure the array has enough elements
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Parse(valueLines[0])); // Assuming the first column is Date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[1]); // Assuming the second column is Agent
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[2]); // Assuming the third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[7]); // Assuming the 8th column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+```
+
+### Steps to Take:
+1. **Ensure the Delimiter**: Check the delimiter used in the `TextFieldParser` (`\t` in this case) matches the delimiter in your CSV file. If your CSV uses commas, change it to `reader.SetDelimiters(",");`.
+2. **Log Value Lines**: The `LogValueLines` method will print the parsed lines to the console. This will help you verify if the data is read correctly.
+3. **Log Parsed Data**: The added log within `ProcessDataRows` will help you see the actual length and content of `valueLines` for each row.
+
+With this information, you should be able to determine whether the issue is with the CSV reading process or with the condition checking the length of `valueLines`.
