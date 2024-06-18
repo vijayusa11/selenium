@@ -1,0 +1,194 @@
+To update the methods for processing the given input format and producing the desired output, we need to ensure the input columns are parsed correctly and the output Excel file is formatted accordingly. Let's go through the necessary updates.
+
+### Updated `CreateExcelForDailyPatientSiteFile` Method
+This method now includes the correct handling for CSV file processing and the output to the Excel file.
+
+```csharp
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+{
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = string.Empty;
+
+            if (aAPCSRFile != null)
+            {
+                sourcefile = aAPCSRFile.ToString();
+            }
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (sheetName != null)
+            {
+                ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (sourcefile != string.Empty)
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+                if (sheetName != string.Empty)
+                {
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                }
+                else
+                {
+                    StartConsoleWriting("...File Not Found...!");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+    return "";
+}
+```
+
+### Updated `LoadDailyPatientSiteCsvData` Method
+This method reads the CSV file and processes the data rows accordingly.
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+        XSSFCellStyle timeStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        timeStyle.DataFormat = workbook.CreateDataFormat().GetFormat("hh:mm:ss");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                
+                if (valueLines == null || valueLines.Length == 0)
+                {
+                    Console.WriteLine("Empty or invalid line encountered.");
+                    continue;
+                }
+
+                // Debug output for valueLines
+                Console.WriteLine("Processing line: " + string.Join(", ", valueLines));
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                    rowIndex++;
+                }
+                else if (!string.IsNullOrWhiteSpace(valueLines[0]) && valueLines.Length == 8)
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle, timeStyle);
+                    rowIndex++;
+                }
+                else
+                {
+                    Console.WriteLine("Skipping line: " + string.Join(", ", valueLines));
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+```
+
+### Updated `ProcessDataRows` Method
+This method extracts the necessary values from the CSV data and writes them to the Excel file.
+
+```csharp
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle, XSSFCellStyle timeStyle)
+{
+    try
+    {
+        // Debug output for valueLines
+        Console.WriteLine("Processing data row: " + string.Join(", ", valueLines));
+
+        // Extracting values from the input line
+        string agentValue = valueLines[0];
+        string timesheetOwnerValue = valueLines[1];
+        string totalTalkingTimeValue = valueLines[7]; // Assuming this is the total talking time column
+
+        // Create a new row for data
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Setting Date cell with current date
+        var dateCell = dataRow.CreateCell(0);
+        dateCell.SetCellValue(DateTime.Now.ToString("dd-MM-yyyy"));
+        dateCell.CellStyle = dateStyle;
+
+        // Setting Agent cell
+        var agentCell = dataRow.CreateCell(1);
+        agentCell.SetCellValue(agentValue);
+        agentCell.CellStyle = numberStyle;
+
+        // Setting TimesheetOwner cell
+        var timesheetOwnerCell = dataRow.CreateCell(2);
+        timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+        timesheetOwnerCell.CellStyle = numberStyle;
+
+        // Setting Total Talking time cell
+        var totalTalkingTimeCell = dataRow.CreateCell(3);
+        totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+        totalTalkingTimeCell.CellStyle = timeStyle;
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Updated `CreateHeaderRow` Method
+This method creates the header row in the Excel sheet.
+
+```csharp
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+By updating these methods, the program should correctly read the input CSV file with columns A to I and output the desired format with columns A to D in the Excel file. Ensure you test with sample data to verify that everything is working as expected.
