@@ -1,0 +1,38 @@
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Assuming the CSV has 4 columns in the specified order
+        if (valueLines.Length >= 8) // Make sure the array has enough elements
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Parse(valueLines[0])); // Assuming the first column is Date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[1]); // Assuming the second column is Agent
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[2]); // Assuming the third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[7]); // Assuming the 8th column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+it is not going into  if (valueLines.Length >= 8) and directly going in else part and data is not inserting
