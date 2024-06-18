@@ -1,0 +1,183 @@
+To integrate the functionality you described into your existing `WebScraping` class, we'll focus on processing the input Excel file containing data structured like "Global Call stats" and generating an output Excel file with specific columns formatted as requested. Below is the modified code with detailed comments explaining each part:
+
+```csharp
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace MedsolPhoneEntry
+{
+    public class WebScraping : IDisposable
+    {
+        public string downloadDirectory = string.Empty;
+        public static string exportDirectory = string.Empty;
+        string dailyActivitySheetName = string.Empty;
+        string outputFilePath = string.Empty;
+        string currentDateTime = DateTime.Now.ToString("hhmmss");
+        string? importFilePath = ConfigurationManager.AppSettings["ImportFilePath"];
+        string? exportFilePath = ConfigurationManager.AppSettings["ExportFilePath"];
+        string? errorLogFilePath = ConfigurationManager.AppSettings["ErrorLogFilePath"];
+        DateTime currentMonthYear = System.DateTime.Now;
+        string? getMonthYear = string.Empty;
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+        }
+
+        public void StartPhoneEntryProcess(string[] args)
+        {
+            try
+            {
+                StartConsoleWriting("Start BOT");
+
+                // Combine base directory with configured file paths
+                string filePathdownloadDirectory = Path.Combine(baseDirectory, downloadDirectory ?? "");
+                string filePathexportDirectory = Path.Combine(baseDirectory, exportDirectory ?? "");
+
+                downloadDirectory = Path.Combine(filePathdownloadDirectory, DateTime.Now.ToString("ddMMyyyy"), DateTime.Now.ToString("hhmmss"), "OriginalBOTFiles");
+                exportDirectory = Path.Combine(filePathexportDirectory, DateTime.Now.ToString("ddMMyyyy"), DateTime.Now.ToString("hhmmss"), "ProcessedBOTFiles");
+
+                getMonthYear = currentMonthYear.ToString("dd-MM-yyyy");
+
+                // Initialize API and check license
+                API aPI = new API();
+                var res = aPI.CheckLicense(GetIPAddress());
+
+                CreateDirectoryIfNotExists(downloadDirectory);
+                CreateDirectoryIfNotExists(exportDirectory);
+
+                if (!string.IsNullOrEmpty(importFilePath))
+                {
+                    string filePathimportDirectory = Path.Combine(baseDirectory, importFilePath);
+
+                    CopyFilesFromImportDirectory(filePathimportDirectory);
+
+                    var importdownloadDirectorypathfile = Path.Combine(baseDirectory, downloadDirectory);
+
+                    try
+                    {
+                        var myDataEntryList = GetSortedFileList(importdownloadDirectorypathfile);
+
+                        if (myDataEntryList.Count > 0)
+                        {
+                            ProcessFiles(myDataEntryList);
+                            DeleteImportFiles(filePathimportDirectory); // Delete all existing files from Import folder after output file generate.
+                        }
+                        else
+                        {
+                            LogToErrorFile("File not found in ImportFile Folder.");
+                            Console.WriteLine("File not found in ImportFile Folder.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogToErrorFile(ex.Message);
+                        StartConsoleWriting(ex.Message);
+                        throw;
+                    }
+                    finally
+                    {
+                        StartConsoleWriting("Run Successfully...");
+                        System.Threading.Thread.Sleep(2000);
+                    }
+                }
+
+                StartConsoleWriting(res);
+                LogToErrorFile(res);
+
+            }
+            catch (Exception ex)
+            {
+                StartConsoleWriting(ex.Message);
+                LogToErrorFile(ex.Message);
+            }
+        }
+
+        public static void CreateDirectoryIfNotExists(string directory)
+        {
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+        }
+
+        public static string GetIPAddress()
+        {
+            try
+            {
+                var ipEntry = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+                var addr = ipEntry.AddressList;
+                var ip = addr[addr.Length - 1].ToString();
+                return ip;
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private void DeleteImportFiles(string importDirectory)
+        {
+            if (Directory.Exists(importDirectory))
+            {
+                DeleteFileIfNeeded(importDirectory); // Delete all existing files from Import folder after output file generate.
+            }
+        }
+
+        public static bool DeleteFileIfNeeded(string path)
+        {
+            bool result = true;
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    foreach (string newPath in Directory.GetFiles(path, "*.*", System.IO.SearchOption.AllDirectories))
+                    {
+                        if (!string.IsNullOrEmpty(newPath))
+                        {
+                            System.IO.File.Delete(newPath);
+                        }
+                    }
+                    Console.WriteLine("File delete from importfile folder.");
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                return false;
+            }
+        }
+
+        private void ProcessFiles(List<FileInfo> fileList)
+        {
+            try
+            {
+                var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Global".ToUpper()) && IsCsvFile(t));
+                ProcessFile(dailyActivityFile, "Global", "Daily Activity file not found.");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+        {
+            try
+            {
+                if (file != null)
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+                    if (fileNameWithoutExtension.Contains("Global"))
+                    {
+                        dailyActivitySheetName = fileNameWithoutExtension;
+                    }
+
+                    if (fileNameWithoutExtension.ToUpper
