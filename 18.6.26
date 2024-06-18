@@ -1,0 +1,151 @@
+To resolve the issues with the header not showing up and data not being populated correctly in the Excel file, let's carefully ensure that the lines containing the data are parsed and processed properly. The key points will be to correctly detect the data section start, properly parse the data rows, and then create the header and populate the rows in the Excel sheet.
+
+Here is the updated version of the `LoadDailyPatientSiteCsvData` method along with relevant helper methods:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+            bool isDataSection = false;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+
+                // Check for the start of the data section
+                if (!isDataSection)
+                {
+                    // Assuming "Agent Extension" is the marker for the start of the data section
+                    if (valueLines.Length > 0 && valueLines[0].Contains("Agent Extension"))
+                    {
+                        isDataSection = true;
+                        reader.ReadLine(); // Skip the unwanted line after "Agent Extension"
+                        reader.ReadLine(); // Skip the unwanted line after the first skipped line
+                        continue;
+                    }
+                    continue;
+                }
+
+                // Log the parsed data
+                LogValueLines(valueLines);
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Ensure the row has enough columns
+        if (valueLines.Length >= 9) // Make sure the array has enough elements, accounting for the blank column
+        {
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Now); // Set the current date
+            dateCell.CellStyle = dateStyle;
+
+            var agentCell = dataRow.CreateCell(1);
+            agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+            agentCell.CellStyle = numberStyle;
+
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[8]); // Ninth column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+
+            // Log what was written to the row
+            LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[8]}");
+        }
+        else
+        {
+            LogToErrorFile($"Row {rowIndex} in CSV does not have enough columns.");
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Explanation of Changes:
+1. **Detection of Data Section**: Improved the detection logic by explicitly looking for "Agent Extension" in the `valueLines` and skipping the next two lines after it to start the data section correctly.
+2. **Logging and Validation**: Added logging for parsed lines and additional validation to ensure rows have the required number of columns.
+3. **Create Header Row**: Ensured the header row is created correctly and appears in the first row of the Excel sheet.
+
+With these changes, the Excel file should now correctly display the headers and the data rows extracted from the CSV file. Make sure the CSV data processing correctly identifies the start of the data section and processes each row accordingly.
