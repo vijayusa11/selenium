@@ -1,0 +1,68 @@
+Certainly! Let's complete the `ProcessFile` method in your `WebScraping` class. This method is responsible for processing a specific file based on certain conditions and generating an Excel file if conditions are met. Here's the complete implementation:
+
+```csharp
+        private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+        {
+            try
+            {
+                if (file != null)
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+                    if (fileNameWithoutExtension.Contains("Global"))
+                    {
+                        dailyActivitySheetName = fileNameWithoutExtension;
+                    }
+
+                    if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+                    {
+                        outputFilePath = Path.Combine(exportDirectory, $"{fileNameWithoutExtension} {getMonthYear} {currentDateTime}.xlsx");
+
+                        using (var workbook = new XSSFWorkbook())
+                        {
+                            ISheet sheet = workbook.CreateSheet(fileNameWithoutExtension); // Create a blank sheet
+
+                            CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+
+                            using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+                            {
+                                workbook.Write(stream); // Save the workbook to an XLSX file
+                            }
+
+                            Console.WriteLine($"{fileNameWithoutExtension}...csv file copied to XLSX successfully...");
+                        }
+                    }
+                }
+                else
+                {
+                    LogToErrorFile(notFoundMessage);
+                    Console.WriteLine(notFoundMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+```
+
+### Explanation:
+
+1. **ProcessFile Method:**
+   - This method takes a `FileInfo` object (`file`) representing a specific file to process.
+   - It checks if the file is not null and if its name contains "Global" (updating `dailyActivitySheetName` accordingly).
+   - It then checks if the `fileNameWithoutExtension` matches the `sheetName` (case insensitive comparison).
+   - If the conditions are met, it constructs the `outputFilePath` where the Excel file will be saved.
+   - Inside a `using` block with `XSSFWorkbook`, it creates a new sheet (`ISheet`) in the workbook.
+   - It calls `CreateExcelForDailyPatientSiteFile` to load data from the CSV file (`file`) into the sheet.
+   - After loading data, it saves the workbook to the specified `outputFilePath` as an XLSX file.
+   - It logs success to the console upon successful completion of file conversion.
+
+2. **CreateExcelForDailyPatientSiteFile Method:**
+   - This method was previously discussed and is responsible for creating an Excel file (`XSSFWorkbook`) from data in a CSV file (`aAPCSRFile`).
+
+3. **LogToErrorFile and StartConsoleWriting Methods:**
+   - These are utility methods for logging errors and messages to the console or a log file.
+
+4. **Exception Handling:**
+   - The method includes exception handling
