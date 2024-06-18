@@ -1,2 +1,71 @@
 Severity	Code	Description	Project	File	Line	Suppression State
 Error	CS0103	The name 'CreateExcelForDailyPatientSiteFile' does not exist in the current context	MedsolPhoneEntry	D:\Projects\MedsolPhoneEntry\MedsolPhoneEntry\WebScrapping.cs	191	Active
+
+
+I apologize for the confusion. It seems there was a misunderstanding in the context of your project structure. Let's correct that and ensure the method `CreateExcelForDailyPatientSiteFile` is properly accessible within your `WebScraping` class. Here's how you can adjust the `ProcessFile` method to call `CreateExcelForDailyPatientSiteFile` correctly:
+
+```csharp
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    try
+    {
+        if (file != null)
+        {
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+            if (fileNameWithoutExtension.Contains("Global"))
+            {
+                dailyActivitySheetName = fileNameWithoutExtension;
+            }
+
+            if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+            {
+                outputFilePath = Path.Combine(exportDirectory, $"{fileNameWithoutExtension} {getMonthYear} {currentDateTime}.xlsx");
+
+                using (var workbook = new XSSFWorkbook())
+                {
+                    ISheet sheet = workbook.CreateSheet(fileNameWithoutExtension); // Create a blank sheet
+
+                    // Load data from CSV file into the sheet
+                    LoadDailyPatientSiteCsvData(file.FullName, sheet, workbook, sheetName);
+
+                    // Save the workbook to an XLSX file
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+                    {
+                        workbook.Write(stream);
+                    }
+
+                    Console.WriteLine($"{fileNameWithoutExtension}...csv file copied to XLSX successfully...");
+                }
+            }
+        }
+        else
+        {
+            LogToErrorFile(notFoundMessage);
+            Console.WriteLine(notFoundMessage);
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Changes Made:
+
+1. **LoadDailyPatientSiteCsvData Method:**
+   - I replaced `CreateExcelForDailyPatientSiteFile` with `LoadDailyPatientSiteCsvData` to accurately reflect the method responsible for loading data from the CSV file into the Excel sheet. This method already handles the data loading process.
+
+2. **Exception Handling:**
+   - The `ProcessFile` method retains its exception handling to catch and log any errors that occur during file processing.
+
+### Explanation:
+
+- **Corrected Method Call:** The method now properly calls `LoadDailyPatientSiteCsvData` to load data from the CSV file (`file.FullName`) into the `workbook` and `sheet`.
+  
+- **File Saving:** After loading data into the workbook, it saves the workbook to the `outputFilePath` as an XLSX file.
+
+- **Logging and Error Handling:** It logs success or errors to the console and handles exceptions gracefully, logging them using `LogToErrorFile` and displaying messages with `StartConsoleWriting`.
+
+This adjustment should resolve the issue related to the `CreateExcelForDailyPatientSiteFile` method not being found and ensure proper functionality within your `WebScraping` class for processing files and generating Excel outputs. Adjustments can be made further based on specific project requirements or additional error handling needs.
