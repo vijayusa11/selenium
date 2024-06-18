@@ -1,0 +1,879 @@
+using MedsolDataEntryAutomation.Services;
+using Microsoft.VisualBasic.FileIO;
+using NPOI.HPSF;
+using NPOI.HSSF.UserModel;
+using NPOI.OpenXmlFormats.Vml;
+using NPOI.SS.Formula.Functions;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using Org.BouncyCastle.Asn1.X509;
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlTypes;
+using System.Linq;
+using System.Net;
+using System.Net.Mail;
+using System.Net.NetworkInformation;
+using System.Text;
+using System.Threading.Tasks;
+using static MedsolDataEntryAutomation.Services.ProcessServices;
+
+namespace MedsolDataEntryAutomation
+{
+    public class WebScraping : IDisposable
+    {
+        public string downloadDirectory = string.Empty;
+        public static string exportDirectory = string.Empty;
+        public static string? importFilePath = Convert.ToString(ConfigurationManager.AppSettings["ImportFilePath"]);
+        public static string? exportFilePath = Convert.ToString(ConfigurationManager.AppSettings["ExportFilePath"]);
+        public static string? errorLogFilePath = Convert.ToString(ConfigurationManager.AppSettings["ErrorLogFilePath"]);
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        string dailyActivitySheetName = string.Empty;
+        string patientConcernSheetName = string.Empty;
+        string siteReportSheetName = string.Empty;
+        string outputFilePath = string.Empty;
+        DateTime currentMonthYear = System.DateTime.Now;
+        string currentDateTime = DateTime.Now.ToString("hhmmss");
+        string? getMonthYear = string.Empty;
+        int rowIndexColumn = 0;
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+        }
+        public void StartDataEntryProcess(string[] args)
+        {
+            try
+            {
+                string mAddress = GetIPAddress();
+                StartConsoleWriting("Start BOT");
+
+                string filePathdownloadDirectory = Path.Combine(baseDirectory, exportFilePath);
+                string filePathexportDirectory = Path.Combine(baseDirectory, exportFilePath);
+
+                downloadDirectory = Path.Combine(filePathdownloadDirectory == null ? "" : filePathdownloadDirectory, DateTime.Now.ToString("ddMMyyyy"), DateTime.Now.ToString("hhmmss"), "OriginalBOTFiles");
+
+                exportDirectory = Path.Combine(filePathexportDirectory == null ? "" : filePathexportDirectory, DateTime.Now.ToString("ddMMyyyy"), DateTime.Now.ToString("hhmmss"), "ProcessedBOTFiles");
+
+                getMonthYear = currentMonthYear.ToString("dd-MM-yyyy");
+
+                API aPI = new API();
+                var res = aPI.CheckLicense(mAddress);
+
+                //if (res == "")
+                //{
+                    CreateDirectoryIfNotExists(downloadDirectory);
+                    CreateDirectoryIfNotExists(exportDirectory);
+
+                    if (importFilePath != null)
+                    {
+                        string filePathimportDirectory = Path.Combine(baseDirectory, importFilePath);
+
+                        CopyFilesFromImportDirectory(filePathimportDirectory);
+
+                        var importdownloadDirectorypathfile = Path.Combine(baseDirectory, downloadDirectory);
+
+                        try
+                        {
+                            var myDataEntryList = GetSortedFileList(importdownloadDirectorypathfile);
+
+                            if (myDataEntryList.Count > 0)
+                            {
+                                ProcessFiles(myDataEntryList);
+                                DeleteImportFiles(filePathimportDirectory); // Delete all existing files from Import folder after output file generate.
+                            }
+                            else
+                            {
+                                LogToErrorFile("File not found in ImportFile Folder.");
+                                Console.WriteLine("File not found in ImportFile Folder.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogToErrorFile(ex.Message);
+                            StartConsoleWriting(ex.Message);
+                            throw;
+                        }
+                        finally
+                        {
+                            StartConsoleWriting("Run Successfully...");
+                            Thread.Sleep(2000);
+                        }
+                    }
+               // }
+                else
+                {
+                    StartConsoleWriting(res);
+                    LogToErrorFile(res);
+                }
+            }
+            catch (Exception ex)
+            {
+                StartConsoleWriting(ex.Message);
+                LogToErrorFile(ex.Message);
+            }
+
+        }
+        public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+        {
+            try
+            {
+                using (var workbook = new XSSFWorkbook())
+                {
+                    string sourcefile = string.Empty;
+
+                    if (aAPCSRFile != null)
+                    {
+                        sourcefile = aAPCSRFile.ToString();
+                    }
+
+                    outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+                    if (sheetName != null)
+                    {
+                        ISheet wb = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                        if (sourcefile != string.Empty)
+                        {
+                            LoadDailyPatientSiteCsvData(sourcefile, wb, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                        }
+                        if (sheetName != string.Empty)
+                        {
+                            using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                            {
+                                workbook.Write(stream);
+                            }
+                            Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                        }
+                        else
+                        {
+                            StartConsoleWriting("...File Not Found...!");
+                        }
+                    }
+                    //else if (sheetName == siteReportSheetName || sheetName == patientConcernSheetName)
+                    //{
+                    //    XSSFWorkbook book;
+
+                    //    if (File.Exists(outputFilePath))
+                    //    {
+                    //        using (FileStream stream = new FileStream(outputFilePath, FileMode.Open, FileAccess.Read))
+                    //        {
+                    //            book = new XSSFWorkbook(stream);
+                    //        }
+                    //        if (outputFilePath != string.Empty)
+                    //        {
+                    //            using (FileStream stream = new FileStream(outputFilePath, FileMode.Open, FileAccess.Write)) // Save the book to an XLSX file
+                    //            {
+                    //                ISheet wb = book.CreateSheet(sheetName); // Create a blank sheet
+
+                    //                if (sourcefile != string.Empty)
+                    //                {
+                    //                    LoadDailyPatientSiteCsvData(sourcefile, wb, book, sheetName);  // Load data from csv file and insert into blank sheet
+                    //                }
+                    //                book.Write(stream);
+                    //            }
+                    //            Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                    //        }
+                    //        else
+                    //        {
+                    //            StartConsoleWriting("...File Not Found...!");
+                    //        }
+                    //    }
+                    //    else
+                    //    {
+                    //        ISheet wb = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                    //        if (sourcefile != string.Empty)
+                    //        {
+                    //            LoadDailyPatientSiteCsvData(sourcefile, wb, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                    //        }
+                    //        if (outputFilePath != string.Empty)
+                    //        {
+                    //            using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    //            {
+                    //                workbook.Write(stream);
+                    //            }
+                    //            Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                    //        }
+                    //        else
+                    //        {
+                    //            StartConsoleWriting("...File Not Found...!");
+                    //        }
+                    //    }
+                    //}
+
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+            return "";
+        }
+        public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+        {
+            try
+            {
+                XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("mmm-yy"));
+
+                XSSFCellStyle numberStyle2 = (XSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle2.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("General"));
+
+                XSSFCellStyle numberStyle3 = (XSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle3.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("dd-mm-yyyy"));
+
+                using (TextFieldParser reader = new TextFieldParser(filePath))
+                {
+                    reader.HasFieldsEnclosedInQuotes = true;
+                    reader.SetDelimiters(",");
+
+                    var (rowIndex, columnSeprated, columnG, columnH, columnJ, columnK, columnL, columnI, columnM, columnN, columnO, columnP, columnQ, columnR, columnS, columnT, columnU, columnV, columnW, columnX) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+                    while (!reader.EndOfData)
+                    {
+                        var value_lines = reader.ReadFields();
+                        int startColumnIndex = 0;
+                        int[] intArray;
+
+                        if (rowIndex == 0 && value_lines != null)
+                        {
+                            int endColumnIndex = Math.Min(25, value_lines.Length - 1);
+
+                            if (sheetName == patientConcernSheetName || sheetName == siteReportSheetName || sheetName == dailyActivitySheetName)
+                            {
+                                for (int i = 0; i <= endColumnIndex; i++)
+                                {
+                                    string value = value_lines[i].ToString().Trim();
+
+                                    if (sheetName == patientConcernSheetName)
+                                    {
+                                        switch (value.ToUpper().Replace(" ", ""))
+                                        {
+                                            case "LOCATION": columnG = i; break;
+                                            case "SPECIALITY": columnH = i; break;
+                                            case "NURSEINCHARGE": columnI = i; break;
+                                            case "DATE": columnJ = i; break;
+                                            case "": columnSeprated = i; break;
+                                        }
+                                    }
+                                    else if (sheetName == siteReportSheetName)
+                                    {
+                                        switch (value.ToUpper().Replace(" ",""))
+                                        {
+                                            case "VARIATIONSTOPOINTSBOOKED/PERFORMED": columnSeprated = i; break;
+                                            case "SITE": columnG = i; break;
+                                            case "NURSEINCHARGE": columnH = i; break;
+                                            case "TOTALNUMBEROFPATIENTSBOOKED": columnJ = i; break;
+                                            case "TOTALNUMBEROFPOINTSBOOKED": columnK = i; break;
+                                            case "TOTALNUMBEROFBOOKEDPOINTSCOMPLETED": columnL = i; break;
+                                            case "TOTALNUMBEROFACTUALPOINTSCOMPLETED": columnM = i; break;
+                                            case "NUMBEROFPATIENTSDNA": columnN = i; break;
+                                            case "NUMBEROFPOINTSDNA": columnO = i; break;
+                                            case "NUMBEROFPATIENTSCANCELLED(CLINICALREASONS)": columnP = i; break;
+                                            case "NUMBEROFPOINTSCANCELLED(CLINICALREASONS)": columnQ = i; break;
+                                            case "NUMBEROFPATIENTSCANCELLED(OTHERREASONS)": columnR = i; break;
+                                            case "NUMBEROFPOINTSCANCELLED(OTHERREASONS)": columnS = i; break;
+                                            case "UNEXPECTEDPATIENTTRANSFERSFORCLINICALREASONS": columnT = i; break;
+                                            case "PATIENTFEEDBACKQRCODECARDSISSUED": columnU = i; break;
+                                            case "DIRECTCOMPLAINTSORCOMPLIMENTSRECEIVED": columnV = i; break;
+                                            case "TEAMLEADERREPORT/FEEDBACK": columnW = i; break;
+                                            case "DATEOFACTIVITY": columnX = i; break;
+                                        }
+                                    }
+                                    else if (sheetName == dailyActivitySheetName)
+                                    {
+                                        switch (value.ToUpper().Replace(" ", ""))
+                                        {
+                                            case "LOCATION": columnG = i; break;
+                                            case "ENDOSCOPIST'SDETAILS": columnH = i; break;
+                                            case "ROOM": columnI = i; break;
+                                            case "SESSION": columnJ = i; break;
+                                            case "GMCNUMBER": columnK = i; break;
+                                            case "NURSE1": columnM = i; break;
+                                            case "NURSE2": columnN = i; break;
+                                            case "DATE": columnU = i; break;
+                                            case "ACTIVITIES": columnSeprated = i; break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        intArray = sheetName switch
+                        {
+                            string s when s == patientConcernSheetName => new int[] { columnG, columnH, columnI, columnJ, columnSeprated },
+                            string s when s == siteReportSheetName => new int[] { columnG, columnH, columnJ, columnK, columnL, columnM, columnN, columnO, columnP, columnQ, columnR, columnS, columnT, columnU, columnV, columnW, columnX, columnSeprated },
+                            string s when s == dailyActivitySheetName => new int[] { columnG, columnH, columnI, columnJ, columnK, columnM, columnN, columnU, columnSeprated },
+                            _ => new int[0] //default case
+                        };
+
+                        if (intArray.Length > 0)
+                        {
+                            if (rowIndex == 0)
+                            {
+                                CreateHeaderRow(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2);
+                            }
+                            else
+                            {
+                                ProcessDataRows(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2, numberStyle3);
+                            }
+
+                            rowIndex = (rowIndex == 0) ? 1 : rowIndexColumn;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+        }
+        void CreateHeaderRow(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, XSSFCellStyle numberStyle2)
+        {
+            try
+            {
+                var dataRow = sheet.CreateRow(rowIndex);
+                foreach (int i in intArray)
+                {
+                    if (i != columnSeprated)
+                    {
+                        dataRow.CreateCell(startColumnIndex).SetCellValue(value_lines[i].ToString());
+                        ICell newCell1 = dataRow.GetCell(startColumnIndex);//N
+                        newCell1.CellStyle = numberStyle2;
+                        startColumnIndex++;
+                    }
+                    else
+                    {
+                        string[] activityAnotherColumn = { };
+
+                        if (sheetName == patientConcernSheetName)
+                        {
+                            activityAnotherColumn = new string[] { "Clinician Name", "GMC Number", "NHS Number", "Referring Clinician", "Procedure", "Outcome / Findings", "Recommendation" };
+                        }
+
+                        if (sheetName == siteReportSheetName)
+                        {
+                            activityAnotherColumn = new string[] { "NHS Number", "Planned Procedure", "Booked Points", "Actual Points", "Justification" };
+                        }
+
+                        if (sheetName == dailyActivitySheetName)
+                        {
+                            activityAnotherColumn = new string[] { "NHS Number", "Planned Procedure", "Outcome", "MDT", "Specimen Taken", "D2 Intubation", "CLO Test", "Caecal Intubation", "Polypectomy", "Withdrawal Time", "Follow-Up Required", "Referral Made" };
+                        }
+
+                        foreach (string items in activityAnotherColumn)
+                        {
+                            dataRow.CreateCell(startColumnIndex).SetCellValue(items);
+                            ICell newCell1 = dataRow.GetCell(startColumnIndex);
+                            newCell1.CellStyle = numberStyle2;
+                            startColumnIndex++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+        }
+        void ProcessDataRows(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, XSSFCellStyle numberStyle2, XSSFCellStyle numberStyle3)
+        {
+            try
+            {
+                string[] values = value_lines[columnSeprated].ToString().Split('\n').Select(sValue => sValue.Trim()).ToArray();
+
+                if (values.Length > 0)
+                {
+                    foreach (string valueItem in values)
+                    {
+                        var dataRow1 = sheet.CreateRow(rowIndex);
+
+                        string[] calData = valueItem.Split(':').Select(sValue => sValue.Trim()).ToArray();
+
+                        int createIndexCell = 0;
+
+                        foreach (int i in intArray)
+                        {
+                            if (i != columnSeprated)
+                            {
+                                if (DateTime.TryParse(value_lines[i], out DateTime dateValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle3;
+                                    createIndexCell++;
+                                }
+                                else if (double.TryParse(value_lines[i], out double intValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                                else
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(value_lines[i].ToString());
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);//N
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                            }
+                            else
+                            {
+                                if (calData.Length > 0)
+                                {
+                                    foreach (string value in calData)
+                                    {
+
+                                        if (DateTime.TryParse(value, out DateTime dateValue))
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle3;
+                                            createIndexCell++;
+                                        }
+                                        else if (double.TryParse(value, out double intValue))
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle2;
+                                            createIndexCell++;
+                                        }
+                                        else
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(value.ToString());
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle2;
+                                            createIndexCell++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        rowIndex++;
+
+                        rowIndexColumn = rowIndex;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+
+        }
+        public static void CopyFilesRecursively(string sourcePath, string targetPath, string baseDirectory)
+        {
+            try
+            {
+                foreach (string newPath in Directory.GetFiles(sourcePath, "*.*", System.IO.SearchOption.AllDirectories))
+                {
+                    FileInfo mFile = new FileInfo(newPath);
+                    if (new FileInfo(sourcePath.Replace(sourcePath, targetPath) + "\\" + mFile.Name).Exists == false)
+                    {
+                        mFile.CopyTo(sourcePath.Replace(sourcePath, targetPath) + "\\" + mFile.Name);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+        }
+        public void CopyFilesFromImportDirectory(string importDirectory)
+        {
+            if (Directory.Exists(importDirectory))
+            {
+                CopyFilesRecursively(importDirectory, downloadDirectory, baseDirectory);
+            }
+        }
+        private void ProcessFiles(List<FileInfo> fileList)
+        {
+            try
+            {
+                var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Activity".ToUpper()) && IsCsvFile(t));
+                var siteReportFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Report".ToUpper()) && IsCsvFile(t));
+                var patientConcernFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Patient".ToUpper()) && IsCsvFile(t));
+
+                ProcessFile(dailyActivityFile, dailyActivitySheetName, "Daily Activity file not found.");
+                ProcessFile(siteReportFile, siteReportSheetName, "Site Report file not found.");
+                ProcessFile(patientConcernFile, patientConcernSheetName, "Patient file not found.");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+
+
+        }
+        private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+        {
+            try
+            {
+                if (file != null)
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+                    if (fileNameWithoutExtension.Contains("Activity"))
+                    {
+                        dailyActivitySheetName = fileNameWithoutExtension;
+                    }
+                    else if (fileNameWithoutExtension.Contains("Report"))
+                    {
+                        siteReportSheetName = fileNameWithoutExtension;
+                    }
+                    else if (fileNameWithoutExtension.Contains("Patient"))
+                    {
+                        patientConcernSheetName = fileNameWithoutExtension;
+                    }
+
+                    if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+                    {
+                        CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+                    }
+                }
+                else
+                {
+                    LogToErrorFile(notFoundMessage);
+                    Console.WriteLine(notFoundMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+        }
+
+        #region ##.Xls Extension##
+        public string XLSCreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+        {
+            try
+            {
+                using (var workbook = new HSSFWorkbook())
+                {
+                    string sourcefile = string.Empty;
+
+                    if (aAPCSRFile != null)
+                    {
+                        sourcefile = aAPCSRFile.ToString();
+                    }
+                    outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+                    if (sheetName != null)
+                    {
+                        ISheet wb = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                        if (sourcefile != string.Empty)
+                        {
+                            XLSLoadDailyPatientSiteCsvData(sourcefile, wb, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                        }
+                        if (sheetName != string.Empty)
+                        {
+                            using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                            {
+                                workbook.Write(stream);
+                            }
+                            Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                        }
+                        else
+                        {
+                            StartConsoleWriting("...File Not Found...!");
+                        }
+                    }
+
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+            return "";
+        }
+        public void XLSLoadDailyPatientSiteCsvData(string filePath, ISheet sheet, HSSFWorkbook workbook, string sheetName)
+        {
+            try
+            {
+                HSSFCellStyle numberStyle = (HSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("mmm-yy"));
+
+                HSSFCellStyle numberStyle2 = (HSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle2.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("General"));
+
+                HSSFCellStyle numberStyle3 = (HSSFCellStyle)workbook.CreateCellStyle();
+                numberStyle3.DataFormat = workbook.CreateDataFormat().GetFormat(string.Format("dd-mm-yyyy"));
+
+                using (TextFieldParser reader = new TextFieldParser(filePath))
+                {
+                    reader.HasFieldsEnclosedInQuotes = true;
+                    reader.SetDelimiters(",");
+
+                    var (rowIndex, columnSeprated, columnG, columnH, columnJ, columnK, columnL, columnI, columnM, columnN, columnO, columnP, columnQ, columnR, columnS, columnT, columnU, columnV, columnW, columnX) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+                    while (!reader.EndOfData)
+                    {
+                        var value_lines = reader.ReadFields();
+                        int startColumnIndex = 0;
+                        int[] intArray;
+
+                        if (rowIndex == 0 && value_lines != null)
+                        {
+                            int endColumnIndex = Math.Min(25, value_lines.Length - 1);
+
+                            if (sheetName == patientConcernSheetName || sheetName == siteReportSheetName || sheetName == dailyActivitySheetName)
+                            {
+                                for (int i = 0; i <= endColumnIndex; i++)
+                                {
+                                    string value = value_lines[i].ToString().Trim();
+
+                                    if (sheetName == patientConcernSheetName)
+                                    {
+                                        switch (value)
+                                        {
+                                            case "Location": columnG = i; break;
+                                            case "Speciality": columnH = i; break;
+                                            case "Nurse in Charge": columnI = i; break;
+                                            case "Date": columnJ = i; break;
+                                            case "": columnSeprated = i; break;
+                                        }
+                                    }
+                                    else if (sheetName == siteReportSheetName)
+                                    {
+                                        switch (value)
+                                        {
+                                            case string s when s.Contains("Variations"): columnSeprated = i; break;
+                                            case string s when s.Contains("Site"): columnG = i; break;
+                                            case "Nurse In Charge": columnH = i; break;
+                                            case "Total number of PATIENTS booked": columnJ = i; break;
+                                            case "Total number of POINTS booked": columnK = i; break;
+                                            case "Total number of BOOKED points completed": columnL = i; break;
+                                            case "Total number of ACTUAL points completed": columnM = i; break;
+                                            case "Number of PATIENTS DNA": columnN = i; break;
+                                            case "Number of POINTS DNA": columnO = i; break;
+                                            case "Number of PATIENTS cancelled (clinical reasons)": columnP = i; break;
+                                            case "Number of POINTS cancelled (clinical reasons)": columnQ = i; break;
+                                            case "Number of PATIENTS cancelled (other reasons)": columnR = i; break;
+                                            case "Number of POINTS cancelled (other reasons)": columnS = i; break;
+                                            case "Unexpected patient transfers for clinical reasons": columnT = i; break;
+                                            case "Patient feedback QR code cards issued": columnU = i; break;
+                                            case "Direct complaints or compliments received": columnV = i; break;
+                                            case "Team Leader Report / Feedback": columnW = i; break;
+                                            case "Date of Activity": columnX = i; break;
+                                        }
+                                    }
+                                    else if (sheetName == dailyActivitySheetName)
+                                    {
+                                        switch (value)
+                                        {
+                                            case "Location": columnG = i; break;
+                                            case "Endoscopist's Details": columnH = i; break;
+                                            case "Room": columnI = i; break;
+                                            case "Session": columnJ = i; break;
+                                            case "GMC Number": columnK = i; break;
+                                            case "Nurse 1": columnM = i; break;
+                                            case "Nurse 2": columnN = i; break;
+                                            case "Date": columnU = i; break;
+                                            case "Activities": columnSeprated = i; break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        intArray = sheetName switch
+                        {
+                            string s when s == patientConcernSheetName => new int[] { columnG, columnH, columnI, columnJ, columnSeprated },
+                            string s when s == siteReportSheetName => new int[] { columnG, columnH, columnJ, columnK, columnL, columnM, columnN, columnO, columnP, columnQ, columnR, columnS, columnT, columnU, columnV, columnW, columnX, columnSeprated },
+                            string s when s == dailyActivitySheetName => new int[] { columnG, columnH, columnI, columnJ, columnK, columnM, columnN, columnU, columnSeprated },
+                            _ => new int[0] //default case
+                        };
+
+                        if (intArray.Length > 0)
+                        {
+                            if (rowIndex == 0)
+                            {
+                                XLSCreateHeaderRow(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2);
+                            }
+                            else
+                            {
+                                XLSProcessDataRows(sheet, rowIndex, value_lines, intArray, startColumnIndex, columnSeprated, sheetName, numberStyle2, numberStyle3);
+                            }
+
+                            rowIndex = (rowIndex == 0) ? 1 : rowIndexColumn;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+        }
+        void XLSCreateHeaderRow(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, HSSFCellStyle numberStyle2)
+        {
+            try
+            {
+                var dataRow = sheet.CreateRow(rowIndex);
+                foreach (int i in intArray)
+                {
+                    if (i != columnSeprated)
+                    {
+                        dataRow.CreateCell(startColumnIndex).SetCellValue(value_lines[i].ToString());
+                        ICell newCell1 = dataRow.GetCell(startColumnIndex);//N
+                        newCell1.CellStyle = numberStyle2;
+                        startColumnIndex++;
+                    }
+                    else
+                    {
+                        string[] activityAnotherColumn = { };
+
+                        if (sheetName == patientConcernSheetName)
+                        {
+                            activityAnotherColumn = new string[] { "Clinician Name", "GMC Number", "NHS Number", "Referring Clinician", "Procedure", "Outcome / Findings", "Recommendation" };
+                        }
+
+                        if (sheetName == siteReportSheetName)
+                        {
+                            activityAnotherColumn = new string[] { "NHS Number", "Planned Procedure", "Booked Points", "Actual Points", "Justification" };
+                        }
+
+                        if (sheetName == dailyActivitySheetName)
+                        {
+                            activityAnotherColumn = new string[] { "NHS Number", "Planned Procedure", "Outcome", "MDT", "Specimen Taken", "D2 Intubation", "CLO Test", "Caecal Intubation", "Polypectomy", "Withdrawal Time", "Follow-Up Required", "Referral Made" };
+                        }
+
+                        foreach (string items in activityAnotherColumn)
+                        {
+                            dataRow.CreateCell(startColumnIndex).SetCellValue(items);
+                            ICell newCell1 = dataRow.GetCell(startColumnIndex);
+                            newCell1.CellStyle = numberStyle2;
+                            startColumnIndex++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+        }
+        void XLSProcessDataRows(ISheet sheet, int rowIndex, string[] value_lines, int[] intArray, int startColumnIndex, int columnSeprated, string sheetName, HSSFCellStyle numberStyle2, HSSFCellStyle numberStyle3)
+        {
+            try
+            {
+                string[] values = value_lines[columnSeprated].ToString().Split('\n').Select(sValue => sValue.Trim()).ToArray();
+
+                if (values.Length > 0)
+                {
+                    foreach (string valueItem in values)
+                    {
+                        var dataRow1 = sheet.CreateRow(rowIndex);
+
+                        string[] calData = valueItem.Split(':').Select(sValue => sValue.Trim()).ToArray();
+
+                        int createIndexCell = 0;
+
+                        foreach (int i in intArray)
+                        {
+                            if (i != columnSeprated)
+                            {
+                                if (DateTime.TryParse(value_lines[i], out DateTime dateValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle3;
+                                    createIndexCell++;
+                                }
+                                else if (double.TryParse(value_lines[i], out double intValue))
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                                else
+                                {
+                                    dataRow1.CreateCell(createIndexCell).SetCellValue(value_lines[i].ToString());
+                                    ICell newCell1 = dataRow1.GetCell(createIndexCell);//N
+                                    newCell1.CellStyle = numberStyle2;
+                                    createIndexCell++;
+                                }
+                            }
+                            else
+                            {
+                                if (calData.Length > 0)
+                                {
+                                    foreach (string value in calData)
+                                    {
+
+                                        if (DateTime.TryParse(value, out DateTime dateValue))
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(dateValue);
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle3;
+                                            createIndexCell++;
+                                        }
+                                        else if (double.TryParse(value, out double intValue))
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(intValue);
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle2;
+                                            createIndexCell++;
+                                        }
+                                        else
+                                        {
+                                            dataRow1.CreateCell(createIndexCell).SetCellValue(value.ToString());
+                                            ICell newCell1 = dataRow1.GetCell(createIndexCell);
+                                            newCell1.CellStyle = numberStyle2;
+                                            createIndexCell++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        rowIndex++;
+
+                        rowIndexColumn = rowIndex;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+
+        }
+        #endregion
+
+        private void DeleteImportFiles(string importDirectory)
+        {
+            if (Directory.Exists(importDirectory))
+            {
+                DeleteFileIfNeeded(importDirectory); // Delete all existing files from Import folder after output file generate.
+            }
+        }
+        public static string GetIPAddress()
+        {
+            try
+            {
+                IPHostEntry ipEntry = Dns.GetHostEntry(Dns.GetHostName());
+                System.Net.IPAddress[] addr = ipEntry.AddressList;
+                string ip = addr[addr.Length - 1].ToString();
+                return ip;
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+    }
+}
