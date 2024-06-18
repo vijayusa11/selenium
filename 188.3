@@ -1,0 +1,215 @@
+ private void ProcessFiles(List<FileInfo> fileList)
+ {
+     try
+     {
+         var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Global".ToUpper()) && IsCsvFile(t));
+         ProcessFile(dailyActivityFile, "Global", "Daily Activity file not found.");
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+     }
+ }
+
+ private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+ {
+     try
+     {
+         if (file != null)
+         {
+             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+             if (fileNameWithoutExtension.Contains("Global"))
+             {
+                 dailyActivitySheetName = fileNameWithoutExtension;
+             }
+
+             if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+             {
+                 CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+             }
+         }
+         else
+         {
+             LogToErrorFile(notFoundMessage);
+             Console.WriteLine(notFoundMessage);
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+     }
+ }
+ public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+ {
+     try
+     {
+         using (var workbook = new XSSFWorkbook())
+         {
+             string sourcefile = string.Empty;
+
+             if (aAPCSRFile != null)
+             {
+                 sourcefile = aAPCSRFile.ToString();
+             }
+
+             outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+             if (sheetName != null)
+             {
+                 ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                 if (sourcefile != string.Empty)
+                 {
+                     LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                 }
+                 if (sheetName != string.Empty)
+                 {
+                     using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                     {
+                         workbook.Write(stream);
+                     }
+                     Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                 }
+                 else
+                 {
+                     StartConsoleWriting("...File Not Found...!");
+                 }
+             }
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+         throw;
+     }
+     return "";
+ }
+
+ public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+ {
+     try
+     {
+         XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+         numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+         XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+         dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+         using (StreamReader reader = new StreamReader(filePath))
+         {
+             int rowIndex = 0;
+             bool isDataSection = false;
+
+             string line;
+             while ((line = reader.ReadLine()) != null)
+             {
+                 var valueLines = line.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries); // Adjust delimiter
+
+                 // Check for the start of the data section
+                 if (!isDataSection)
+                 {
+                     if (valueLines.Length > 0 && valueLines[0].Contains("Agent Extension"))
+                     {
+                         isDataSection = true;
+                         reader.ReadLine(); // Skip the unwanted line after "Agent Extension"
+                         reader.ReadLine(); // Skip the unwanted line after the first skipped line
+                         continue;
+                     }
+                     continue;
+                 }
+
+                 // Log the parsed data
+                 LogValueLines(valueLines);
+
+                 if (rowIndex == 0)
+                 {
+                     CreateHeaderRow(sheet, numberStyle);
+                 }
+                 else
+                 {
+                     ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                 }
+                 rowIndex++;
+             }
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+         throw;
+     }
+ }
+
+ void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+ {
+     try
+     {
+         // Create a new row at the top of the sheet for the header
+         var headerRow = sheet.CreateRow(0);
+
+         // Define the headers
+         string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+         // Loop through each header and create a cell in the header row
+         for (int i = 0; i < headers.Length; i++)
+         {
+             var cell = headerRow.CreateCell(i);
+             cell.SetCellValue(headers[i]); // Set the header text
+             cell.CellStyle = style; // Apply the style to the cell
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+     }
+ }
+ void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+ {
+     try
+     {
+         var dataRow = sheet.CreateRow(rowIndex);
+
+         // Log the length and content of valueLines
+         LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+         // Proceed with the parsing assuming we have the required data
+         var dateCell = dataRow.CreateCell(0);
+         dateCell.SetCellValue(DateTime.Now); // Set the current date
+         dateCell.CellStyle = dateStyle;
+
+         var agentCell = dataRow.CreateCell(1);
+         agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+         agentCell.CellStyle = numberStyle;
+
+         var timesheetOwnerCell = dataRow.CreateCell(2);
+         timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+         timesheetOwnerCell.CellStyle = numberStyle;
+
+         var totalTalkingTimeCell = dataRow.CreateCell(3);
+         totalTalkingTimeCell.SetCellValue(valueLines[^1]); // Last column contains the total talking time
+         totalTalkingTimeCell.CellStyle = numberStyle;
+
+         // Log what was written to the row
+         LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[^1]}");
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+     }
+ }
+
+ void LogValueLines(string[] valueLines)
+ {
+     if (valueLines != null)
+     {
+         Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+     }
+     else
+     {
+         Console.WriteLine("Parsed Line: null");
+     }
+ }
