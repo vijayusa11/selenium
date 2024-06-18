@@ -1,0 +1,164 @@
+To create a .NET Core bot that processes an Excel file and generates an output as per the specified format, you can modify and extend your existing code. Below is the complete implementation, including the methods to read the input file and generate the desired output file.
+
+Ensure you have the necessary NuGet packages installed:
+- `NPOI` for handling Excel files.
+- `Microsoft.VisualBasic.FileIO` for handling CSV parsing (if needed).
+
+Here's the full implementation:
+
+```csharp
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace ExcelProcessingBot
+{
+    public class Program
+    {
+        static void Main(string[] args)
+        {
+            string inputFilePath = "path_to_your_input_file.xlsx";
+            string outputFilePath = "path_to_your_output_file.xlsx";
+
+            ProcessFiles(inputFilePath, outputFilePath);
+        }
+
+        private static void ProcessFiles(string inputFilePath, string outputFilePath)
+        {
+            try
+            {
+                FileInfo inputFile = new FileInfo(inputFilePath);
+
+                if (inputFile.Exists)
+                {
+                    CreateOutputExcelFile(inputFile, outputFilePath);
+                }
+                else
+                {
+                    Console.WriteLine("Input file not found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void CreateOutputExcelFile(FileInfo inputFile, string outputFilePath)
+        {
+            try
+            {
+                using (var workbook = new XSSFWorkbook())
+                {
+                    ISheet sheet = workbook.CreateSheet("Global Call Stats");
+
+                    // Process the input file and load data into the output sheet
+                    LoadDataFromInputFile(inputFile.FullName, sheet, workbook);
+
+                    // Save the workbook to an XLSX file
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine("File processed successfully...");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void LoadDataFromInputFile(string filePath, ISheet sheet, IWorkbook workbook)
+        {
+            try
+            {
+                XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+                dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+                using (FileStream file = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                {
+                    IWorkbook inputWorkbook = new XSSFWorkbook(file);
+                    ISheet inputSheet = inputWorkbook.GetSheetAt(0);
+
+                    // Create header row
+                    CreateHeaderRow(sheet, workbook);
+
+                    int outputRowIndex = 1; // Start from row 1 because row 0 is the header
+                    for (int i = 5; i <= inputSheet.LastRowNum; i++) // Starting from the 6th row (index 5)
+                    {
+                        IRow inputRow = inputSheet.GetRow(i);
+                        if (inputRow == null || inputRow.Cells.All(d => d.CellType == CellType.Blank)) continue;
+
+                        ProcessDataRows(sheet, outputRowIndex, inputRow, dateStyle);
+                        outputRowIndex++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void CreateHeaderRow(ISheet sheet, IWorkbook workbook)
+        {
+            try
+            {
+                var headerRow = sheet.CreateRow(0);
+                string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    var cell = headerRow.CreateCell(i);
+                    cell.SetCellValue(headers[i]);
+                    XSSFCellStyle style = (XSSFCellStyle)workbook.CreateCellStyle();
+                    style.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+                    cell.CellStyle = style;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void ProcessDataRows(ISheet sheet, int rowIndex, IRow inputRow, XSSFCellStyle dateStyle)
+        {
+            try
+            {
+                var dataRow = sheet.CreateRow(rowIndex);
+
+                var dateCell = dataRow.CreateCell(0);
+                dateCell.SetCellValue(DateTime.Now); // Set the current date
+                dateCell.CellStyle = dateStyle;
+
+                var agentCell = dataRow.CreateCell(1);
+                agentCell.SetCellValue(inputRow.GetCell(0).ToString()); // Agent Extension
+
+                var timesheetOwnerCell = dataRow.CreateCell(2);
+                timesheetOwnerCell.SetCellValue(inputRow.GetCell(1).ToString()); // TimesheetOwner
+
+                var totalTalkingTimeCell = dataRow.CreateCell(3);
+                totalTalkingTimeCell.SetCellValue(inputRow.GetCell(7).ToString()); // Total Talking time
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+}
+```
+
+In this implementation:
+- The `ProcessFiles` method checks if the input file exists and calls `CreateOutputExcelFile` to process it.
+- The `CreateOutputExcelFile` method creates a new Excel workbook and sheet, and calls `LoadDataFromInputFile` to load data from the input file.
+- The `LoadDataFromInputFile` method reads the input file and processes its rows, calling `ProcessDataRows` for each data row.
+- The `CreateHeaderRow` method creates the header row in the output file.
+- The `ProcessDataRows` method processes each data row and writes the required fields to the output file.
+
+Adjust the file paths and sheet names as needed. This code assumes the input file is an Excel file; if it's a CSV file, you may need to adjust the parsing logic accordingly.
