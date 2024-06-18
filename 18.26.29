@@ -1,0 +1,4 @@
+Severity	Code	Description	Project	File	Line	Suppression State
+Error	CS1061	'StreamReader' does not contain a definition for 'EndOfData' and no accessible extension method 'EndOfData' 
+accepting a first argument of type 'StreamReader' could be found (are you missing a using directive or an assembly reference?)	
+MedsolPhoneEntry	D:\Projects\MedsolPhoneEntry\MedsolPhoneEntry\WebScrapping.cs	271	Active
