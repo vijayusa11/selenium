@@ -1,0 +1,117 @@
+To insert Excel data into a SQL Server table, you can follow these steps:
+
+1. **Read data from the Excel file**.
+2. **Transform the data as needed**.
+3. **Insert the data into the SQL Server table**.
+
+Below is a complete example that demonstrates how to achieve this in C#. This example includes:
+- Reading data from an Excel file using NPOI.
+- Creating the SQL Server table (if it doesn't already exist).
+- Inserting data into the SQL Server table.
+
+### 1. Create SQL Server Table
+First, ensure you have a table in your SQL Server database where the data will be inserted. Here's a sample SQL script to create the table:
+
+```sql
+CREATE TABLE DailyTimesheet (
+    Date DATE,
+    Agent INT,
+    TimesheetOwner NVARCHAR(100),
+    TotalTalkingTime TIME
+);
+```
+
+### 2. Read Data from Excel and Insert into SQL Server
+Below is a complete example of how to read data from an Excel file and insert it into the SQL Server table:
+
+```csharp
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System;
+using System.Data;
+using System.Data.SqlClient;
+using System.IO;
+
+namespace ExcelToSqlServer
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            string excelFilePath = @"path\to\your\excel\file.xlsx";
+            string connectionString = "your-sql-server-connection-string";
+
+            DataTable dataTable = ReadExcelData(excelFilePath);
+            InsertDataIntoSqlServer(dataTable, connectionString);
+        }
+
+        static DataTable ReadExcelData(string filePath)
+        {
+            DataTable dt = new DataTable();
+            using (FileStream file = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            {
+                XSSFWorkbook workbook = new XSSFWorkbook(file);
+                ISheet sheet = workbook.GetSheetAt(0);
+                IRow headerRow = sheet.GetRow(0);
+                int cellCount = headerRow.LastCellNum;
+
+                // Adding columns
+                for (int j = 0; j < cellCount; j++)
+                {
+                    dt.Columns.Add(headerRow.GetCell(j).ToString());
+                }
+
+                // Adding rows
+                for (int i = (sheet.FirstRowNum + 1); i <= sheet.LastRowNum; i++)
+                {
+                    IRow row = sheet.GetRow(i);
+                    DataRow dataRow = dt.NewRow();
+
+                    for (int j = row.FirstCellNum; j < cellCount; j++)
+                    {
+                        dataRow[j] = row.GetCell(j)?.ToString();
+                    }
+
+                    dt.Rows.Add(dataRow);
+                }
+            }
+            return dt;
+        }
+
+        static void InsertDataIntoSqlServer(DataTable dataTable, string connectionString)
+        {
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    SqlCommand cmd = new SqlCommand(
+                        "INSERT INTO DailyTimesheet (Date, Agent, TimesheetOwner, TotalTalkingTime) VALUES (@Date, @Agent, @TimesheetOwner, @TotalTalkingTime)", 
+                        connection);
+                    
+                    cmd.Parameters.AddWithValue("@Date", DateTime.Parse(row["Date"].ToString()));
+                    cmd.Parameters.AddWithValue("@Agent", int.Parse(row["Agent"].ToString()));
+                    cmd.Parameters.AddWithValue("@TimesheetOwner", row["TimesheetOwner"].ToString());
+                    cmd.Parameters.AddWithValue("@TotalTalkingTime", TimeSpan.Parse(row["Total Talking time"].ToString()));
+                    
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+    }
+}
+```
+
+### Explanation
+
+1. **ReadExcelData Method**: Reads data from an Excel file and stores it in a DataTable.
+   - Uses NPOI to read the Excel file.
+   - Creates columns in the DataTable based on the Excel header.
+   - Adds rows to the DataTable by iterating through the rows in the Excel sheet.
+
+2. **InsertDataIntoSqlServer Method**: Inserts the DataTable data into the SQL Server table.
+   - Opens a connection to the SQL Server.
+   - Iterates through each row in the DataTable.
+   - Inserts each row into the SQL Server table using a parameterized query to prevent SQL injection.
+
+Make sure to replace `path\to\your\excel\file.xlsx` and `your-sql-server-connection-string` with the actual file path and your SQL Server connection string.
