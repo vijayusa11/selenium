@@ -1,0 +1,142 @@
+The `StreamReader` class in .NET does not have an `EndOfData` property. Instead, you should use the `ReadLine` method to read lines until `ReadLine` returns `null`. Here's the corrected method using a `StreamReader`:
+
+### Corrected `LoadDailyPatientSiteCsvData` Method
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (StreamReader reader = new StreamReader(filePath))
+        {
+            int rowIndex = 0;
+            bool isDataSection = false;
+
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                var valueLines = line.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries); // Adjust delimiter
+
+                // Check for the start of the data section
+                if (!isDataSection)
+                {
+                    if (valueLines.Length > 0 && valueLines[0].Contains("Agent Extension"))
+                    {
+                        isDataSection = true;
+                        reader.ReadLine(); // Skip the unwanted line after "Agent Extension"
+                        reader.ReadLine(); // Skip the unwanted line after the first skipped line
+                        continue;
+                    }
+                    continue;
+                }
+
+                // Log the parsed data
+                LogValueLines(valueLines);
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Log the length and content of valueLines
+        LogToErrorFile($"Row {rowIndex}: Length = {valueLines.Length}, Content = [{string.Join(", ", valueLines)}]");
+
+        // Proceed with the parsing assuming we have the required data
+        var dateCell = dataRow.CreateCell(0);
+        dateCell.SetCellValue(DateTime.Now); // Set the current date
+        dateCell.CellStyle = dateStyle;
+
+        var agentCell = dataRow.CreateCell(1);
+        agentCell.SetCellValue(valueLines[0]); // First column is Agent Extension
+        agentCell.CellStyle = numberStyle;
+
+        var timesheetOwnerCell = dataRow.CreateCell(2);
+        timesheetOwnerCell.SetCellValue(valueLines[1]); // Third column is TimesheetOwner
+        timesheetOwnerCell.CellStyle = numberStyle;
+
+        var totalTalkingTimeCell = dataRow.CreateCell(3);
+        totalTalkingTimeCell.SetCellValue(valueLines[^1]); // Last column contains the total talking time
+        totalTalkingTimeCell.CellStyle = numberStyle;
+
+        // Log what was written to the row
+        LogToErrorFile($"Written to Excel - Row {rowIndex}: Date={DateTime.Now}, Agent={valueLines[0]}, TimesheetOwner={valueLines[1]}, TotalTalkingTime={valueLines[^1]}");
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void LogValueLines(string[] valueLines)
+{
+    if (valueLines != null)
+    {
+        Console.WriteLine($"Parsed Line: {string.Join(", ", valueLines)}");
+    }
+    else
+    {
+        Console.WriteLine("Parsed Line: null");
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Explanation:
+- **Reading Lines**: Instead of `EndOfData`, we use a while loop with `ReadLine` and check for `null` to indicate the end of the file.
+- **Delimiter Handling**: The line is split using both tab (`\t`) and space characters, removing any empty entries.
+- **ProcessDataRows**: Adjusted to always process rows without a strict length check, assuming the first column is `Agent Extension` and the last column is `Total Talking Time`.
+- **Logging**: Enhanced logging to capture more details for debugging purposes.
+
+This should help ensure the data is correctly parsed and written to the Excel sheet.
