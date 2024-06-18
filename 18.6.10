@@ -1,0 +1,120 @@
+Based on your description and the provided code, it appears that the application isn't processing the CSV files as expected and only writing the header row to the output Excel file.
+
+The issue might stem from the `ProcessDataRows` method or the data extraction logic in `LoadDailyPatientSiteCsvData`.
+
+Here are the steps to diagnose and address this issue:
+
+1. **Verify CSV Reading:**
+   Ensure the CSV file is read correctly by adding debugging output to verify the content of `valueLines`.
+
+2. **Check CSV Format:**
+   Confirm that the CSV format matches the expected structure, especially the delimiter (`\t`). If the CSV uses a different delimiter, adjust the `SetDelimiters` method accordingly.
+
+3. **Debug Data Rows Processing:**
+   Add debug statements to ensure the data rows are processed correctly and verify the values being read and written.
+
+Here's an updated version of the critical sections with added debug output:
+
+```csharp
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+        XSSFCellStyle timeStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        timeStyle.DataFormat = workbook.CreateDataFormat().GetFormat("hh:mm:ss");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                
+                if (valueLines == null || valueLines.Length == 0)
+                {
+                    Console.WriteLine("Empty or invalid line encountered.");
+                    continue;
+                }
+
+                // Debug output for valueLines
+                Console.WriteLine("Processing line: " + string.Join(", ", valueLines));
+
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                    rowIndex++;
+                }
+                else if (int.TryParse(valueLines[0].Split(' ')[0], out _)) // Check if the first part is numeric
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle, timeStyle);
+                    rowIndex++;
+                }
+                else
+                {
+                    Console.WriteLine("Skipping line: " + string.Join(", ", valueLines));
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle, XSSFCellStyle timeStyle)
+{
+    try
+    {
+        // Debug output for valueLines
+        Console.WriteLine("Processing data row: " + string.Join(", ", valueLines));
+
+        // Extracting values from the input line
+        string agentValue = valueLines[0].Split(' ')[0];
+        string timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim();
+        string totalTalkingTimeValue = valueLines[7]; // Assuming this is the total talking time column
+
+        // Create a new row for data
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Setting Date cell with current date
+        var dateCell = dataRow.CreateCell(0);
+        dateCell.SetCellValue(DateTime.Now.ToString("dd-MM-yyyy"));
+        dateCell.CellStyle = dateStyle;
+
+        // Setting Agent cell
+        var agentCell = dataRow.CreateCell(1);
+        agentCell.SetCellValue(agentValue);
+        agentCell.CellStyle = numberStyle;
+
+        // Setting TimesheetOwner cell
+        var timesheetOwnerCell = dataRow.CreateCell(2);
+        timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+        timesheetOwnerCell.CellStyle = numberStyle;
+
+        // Setting Total Talking time cell
+        var totalTalkingTimeCell = dataRow.CreateCell(3);
+        totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+        totalTalkingTimeCell.CellStyle = timeStyle;
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+By adding these debug statements, you should be able to see the content being read from the CSV and verify that the correct values are being processed and written to the Excel file. If any issues are found during this process, you can further narrow down the cause and address them accordingly.
