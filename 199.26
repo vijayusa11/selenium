@@ -2,3 +2,90 @@ every time dont create a new folder or path save all input excels output in same
 accordingly if want also can do on system desktop.
 
 only write method in which i have to change
+
+
+
+
+Sure, I'll modify the necessary methods to ensure that all input Excel files are saved and extended in the same output file. The primary methods that need to be changed are `CreateOrUpdateExcelFile` and the way `outputFilePath` is defined.
+
+Here's the updated `CreateOrUpdateExcelFile` method and the necessary changes to the class:
+
+```csharp
+public class WebScraping : IDisposable
+{
+    // Other class members...
+
+    string outputFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ConsolidatedOutput.xlsx");
+
+    // Other methods...
+
+    public string CreateOrUpdateExcelFile(FileInfo csvFile, string sheetName)
+    {
+        try
+        {
+            IWorkbook workbook;
+
+            if (File.Exists(outputFilePath))
+            {
+                using (FileStream file = new FileStream(outputFilePath, FileMode.Open, FileAccess.Read))
+                {
+                    workbook = new XSSFWorkbook(file);
+                }
+            }
+            else
+            {
+                workbook = new XSSFWorkbook();
+            }
+
+            ISheet sheet = workbook.GetSheet(sheetName) ?? workbook.CreateSheet(sheetName);
+
+            using (TextFieldParser parser = new TextFieldParser(csvFile.FullName))
+            {
+                parser.SetDelimiters("\t");
+                parser.HasFieldsEnclosedInQuotes = true;
+
+                int rowIndex = sheet.PhysicalNumberOfRows; // Start writing at the next available row
+
+                while (!parser.EndOfData)
+                {
+                    string[] fields = parser.ReadFields();
+                    IRow row = sheet.CreateRow(rowIndex++);
+
+                    for (int i = 0; i < fields.Length; i++)
+                    {
+                        row.CreateCell(i).SetCellValue(fields[i]);
+                    }
+                }
+            }
+
+            using (FileStream fileOut = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+            {
+                workbook.Write(fileOut);
+            }
+
+            return outputFilePath;
+        }
+        catch (Exception ex)
+        {
+            LogToErrorFile(ex.Message);
+            StartConsoleWriting(ex.Message);
+            return string.Empty;
+        }
+    }
+
+    // Other methods...
+}
+
+```
+
+### Changes Made:
+
+1. **Output File Path**:
+   - The `outputFilePath` is now defined as a fixed path on the system desktop: `Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ConsolidatedOutput.xlsx")`.
+
+2. **CreateOrUpdateExcelFile Method**:
+   - The method opens the existing `ConsolidatedOutput.xlsx` file from the desktop if it exists.
+   - If it doesn't exist, it creates a new workbook.
+   - The method appends new data from the input CSV file to the existing sheet or creates a new sheet if the sheet doesn't already exist.
+
+With these changes, the program will always save the output in the same file on the desktop and extend the existing data with each new input file processed.
