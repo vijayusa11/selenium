@@ -1,0 +1,2 @@
+getting error here -  DateTime date = (DateTime)row.GetCell(0).DateCellValue;
+Invalid column name 'Date'.'
