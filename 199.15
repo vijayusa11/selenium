@@ -1,0 +1,28 @@
+Certainly! Based on the fields you are inserting from the Excel file into the SQL Server database, here is an example of how you can create the corresponding database table:
+
+```sql
+CREATE TABLE YourTableName (
+    Id INT PRIMARY KEY IDENTITY(1,1), -- Assuming you want an auto-incrementing primary key
+    Date DATE NOT NULL,
+    Agent NVARCHAR(100) NOT NULL,
+    TimesheetOwner NVARCHAR(100) NOT NULL,
+    TotalTalkingTime NVARCHAR(20) -- Adjust the size based on your data length
+);
+```
+
+### Explanation:
+- **Id**: This is an auto-incrementing primary key column, which uniquely identifies each row in the table.
+- **Date**: Stores the date value from the Excel file.
+- **Agent**: Stores the agent value from the Excel file.
+- **TimesheetOwner**: Stores the timesheet owner value from the Excel file.
+- **TotalTalkingTime**: Stores the total talking time value from the Excel file. Since you mentioned it might be in the format `00:00:00`, `NVARCHAR` is used to store it as a string.
+
+### Considerations:
+- Adjust the data types and sizes (`NVARCHAR`, `DATE`, etc.) based on the actual data characteristics and requirements of your application.
+- Ensure the primary key (`Id`) is set up correctly according to your database's best practices.
+- Add any additional columns or constraints as needed by your application.
+
+### Integration with C# Code:
+In your C# code, ensure the `InsertIntoDatabase` method is correctly updated to match the table structure you've defined here. Adjust column names, types, and any necessary validation or handling based on your specific requirements.
+
+This table creation script provides a foundational structure for storing the Excel data in a SQL Server database table. Adjustments may be needed based on specific application needs, such as additional columns, constraints, or indexing requirements.
