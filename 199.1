@@ -174,3 +174,211 @@ here is required methods where we have to change
          StartConsoleWriting(ex.Message);
      }
  }
+
+
+...........
+
+To achieve the modifications you specified, we'll need to make the following changes to your methods:
+
+1. Modify the `ProcessDataRows` method to parse the `Agent` column values, extract the numeric part, and assign it to column B, while placing the text "TimesheetOwner" in column C.
+2. Ensure that the `CreateHeaderRow` method includes appropriate headers for the new columns.
+
+Here's the updated code:
+
+```csharp
+using System;
+using System.IO;
+using Microsoft.VisualBasic.FileIO;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    try
+    {
+        if (file != null)
+        {
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+            if (fileNameWithoutExtension.Contains("Global"))
+            {
+                dailyActivitySheetName = fileNameWithoutExtension;
+            }
+
+            if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+            {
+                CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+            }
+        }
+        else
+        {
+            LogToErrorFile(notFoundMessage);
+            Console.WriteLine(notFoundMessage);
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+{
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = string.Empty;
+
+            if (aAPCSRFile != null)
+            {
+                sourcefile = aAPCSRFile.ToString();
+            }
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (sheetName != null)
+            {
+                ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (sourcefile != string.Empty)
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+                if (sheetName != string.Empty)
+                {
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                }
+                else
+                {
+                    StartConsoleWriting("...File Not Found...!");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+    return "";
+}
+
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-mm-yyyy");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle)
+{
+    try
+    {
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Assuming the CSV has the correct number of columns in the specified order
+        if (valueLines.Length >= 8) // Ensure there are enough columns
+        {
+            // Date column
+            var dateCell = dataRow.CreateCell(0);
+            dateCell.SetCellValue(DateTime.Parse("22-04-2024"));
+            dateCell.CellStyle = dateStyle;
+
+            // Agent column (numeric part extraction)
+            var agentCell = dataRow.CreateCell(1);
+            var agentValue = valueLines[1];
+            var numericPart = new string(agentValue.Where(char.IsDigit).ToArray());
+            agentCell.SetCellValue(numericPart);
+            agentCell.CellStyle = numberStyle;
+
+            // TimesheetOwner column (text part extraction)
+            var timesheetOwnerCell = dataRow.CreateCell(2);
+            timesheetOwnerCell.SetCellValue("TimesheetOwner");
+            timesheetOwnerCell.CellStyle = numberStyle;
+
+            // Total Talking time column
+            var totalTalkingTimeCell = dataRow.CreateCell(3);
+            totalTalkingTimeCell.SetCellValue(valueLines[7]); // Assuming the 8th column contains the total talking time
+            totalTalkingTimeCell.CellStyle = numberStyle;
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Explanation:
+
+1. **ProcessDataRows Method**:
+   - Extract the numeric part from the `Agent` column value and assign it to column B.
+   - Assign the text "TimesheetOwner" to column C.
+   
+2. **CreateHeaderRow Method**:
+   - Ensure that the headers are set correctly for the columns including "Agent" and "TimesheetOwner".
+
+By implementing these changes, you should be able to achieve the desired output in the Excel file.
