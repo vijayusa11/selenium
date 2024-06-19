@@ -1,0 +1,175 @@
+It looks like the `sheetName` parameter passed to `InsertIntoDatabase` is null, causing `workbook.GetSheet(sheetName)` to fail. We need to ensure that `sheetName` is correctly set and passed throughout the process. Let's debug and adjust the code to ensure `sheetName` is handled properly.
+
+Here's a revised version of your code with added checks and corrections:
+
+1. **Debug the `sheetName` Parameter**: Ensure `sheetName` is correctly set before calling `InsertIntoDatabase`.
+
+2. **Update the `ProcessFile` Method**: Ensure the correct `sheetName` is passed.
+
+### Revised `ProcessFile` Method
+```csharp
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    try
+    {
+        if (file != null)
+        {
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+            if (fileNameWithoutExtension.Contains("Global"))
+            {
+                dailyActivitySheetName = fileNameWithoutExtension;
+            }
+
+            if (!string.IsNullOrEmpty(sheetName) && fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+            {
+                string outputFilePath = CreateExcelForDailyPatientSiteFile(file, fileNameWithoutExtension);
+                if (!string.IsNullOrEmpty(outputFilePath))
+                {
+                    InsertIntoDatabase(outputFilePath, sheetName); // Insert data into database after creating Excel
+                }
+            }
+        }
+        else
+        {
+            LogToErrorFile(notFoundMessage);
+            Console.WriteLine(notFoundMessage);
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+```
+
+### Revised `InsertIntoDatabase` Method
+Add checks for null values and more detailed logging:
+
+```csharp
+private void InsertIntoDatabase(string excelFilePath, string sheetName)
+{
+    if (string.IsNullOrEmpty(sheetName))
+    {
+        LogToErrorFile("Sheet name is null or empty.");
+        return;
+    }
+
+    try
+    {
+        using (SqlConnection connection = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+        {
+            connection.Open();
+
+            string query = @"INSERT into OutputFileDetails (Date, Agent, TimesheetOwner, TotalTalkingTime)
+                             values (@Date, @Agent, @TimesheetOwner, @TotalTalkingTime)";
+
+            using (SqlCommand command = new SqlCommand(query, connection))
+            {
+                using (var workbook = new XSSFWorkbook(File.Open(excelFilePath, FileMode.Open, FileAccess.Read)))
+                {
+                    ISheet sheet = workbook.GetSheet(sheetName);
+
+                    if (sheet == null)
+                    {
+                        LogToErrorFile($"Sheet '{sheetName}' not found in workbook.");
+                        return;
+                    }
+
+                    for (int i = 1; i <= sheet.LastRowNum; i++)
+                    {
+                        var row = sheet.GetRow(i);
+                        if (row == null)
+                        {
+                            LogToErrorFile($"Row {i} is null.");
+                            continue;
+                        }
+
+                        DateTime date = row.GetCell(0).DateCellValue;
+                        string agent = row.GetCell(1).StringCellValue;
+                        string timesheetOwner = row.GetCell(2).StringCellValue;
+                        string totalTalkingTime = row.GetCell(3).StringCellValue;
+
+                        command.Parameters.Clear();
+                        command.Parameters.AddWithValue("@Date", date);
+                        command.Parameters.AddWithValue("@Agent", agent);
+                        command.Parameters.AddWithValue("@TimesheetOwner", timesheetOwner);
+                        command.Parameters.AddWithValue("@TotalTalkingTime", totalTalkingTime);
+
+                        command.ExecuteNonQuery();
+                    }
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Revised `CreateExcelForDailyPatientSiteFile` Method
+Ensure the correct `sheetName` is passed:
+
+```csharp
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string sheetName)
+{
+    string outputFilePath = string.Empty;
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = aAPCSRFile?.ToString() ?? string.Empty;
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (!string.IsNullOrEmpty(sheetName))
+            {
+                ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (!string.IsNullOrEmpty(sourcefile))
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+
+                using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                {
+                    workbook.Write(stream);
+                }
+                Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+            }
+            else
+            {
+                StartConsoleWriting("Sheet name is null or empty.");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+    return outputFilePath;
+}
+```
+
+### Additional Logging
+Adding more logging helps track down issues:
+
+```csharp
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    LogToErrorFile($"Processing file: {file?.Name ?? "null"} with sheetName: {sheetName}");
+
+    // Rest of the method...
+}
+
+private void InsertIntoDatabase(string excelFilePath, string sheetName)
+{
+    LogToErrorFile($"Inserting into database from file: {excelFilePath}, sheetName: {sheetName}");
+
+    // Rest of the method...
+}
+```
+
+By ensuring `sheetName` is correctly set and passed, and adding detailed logging, you should be able to debug and fix the issue where `sheetName` is null. Make sure to review your file naming and ensure consistency in naming sheets and passing the correct names throughout your methods.
