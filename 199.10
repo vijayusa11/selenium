@@ -1,0 +1,5 @@
+in timesheetowner getting this Spare ,,0,0,0,0,0,0,00:00:00
+and want to get Spare only that is remaining part of input file column A
+so what line i can write here in place of string timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim();
+and 00:00:00 want to write in cloumn D so
+only give these  lines solution only 
