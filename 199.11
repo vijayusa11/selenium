@@ -66,3 +66,98 @@ give me solution for this method only
          StartConsoleWriting(ex.Message);
      }
  }
+
+
+kkkkkk
+kkkkkk
+kkkkkk
+
+To extract the value after the last comma `,` from `timesheetOwnerValue` and assign it to `totalTalkingTimeValue` in column D of the output file, you can modify the `ProcessDataRows` method as follows:
+
+```csharp
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle, XSSFCellStyle timeStyle)
+{
+    try
+    {
+        // Extracting values from the input line
+        string[] columns = valueLines[0].Split('\t'); // Split by tab to separate columns
+        string agentValue = columns[0].Split(' ')[0]; // Extract numeric agent value
+
+        // Extract non-numeric part of the first column as TimesheetOwner value
+        string timesheetOwnerValue = ExtractCharacterValues(columns[0]);
+
+        // Remove commas from TimesheetOwner value
+        timesheetOwnerValue = timesheetOwnerValue.Replace(",", "");
+        timesheetOwnerValue = timesheetOwnerValue.Replace("::", ""); // Remove any extra :: characters
+
+        // Extract value after the last comma for totalTalkingTimeValue
+        string totalTalkingTimeValue = ExtractTotalTalkingTime(valueLines[0]);
+
+        // Create a new row for data
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Setting Date cell with current date
+        var dateCell = dataRow.CreateCell(0);
+        dateCell.SetCellValue(DateTime.Today); // Assuming you want today's date
+        dateCell.CellStyle = dateStyle;
+
+        // Setting Agent cell
+        var agentCell = dataRow.CreateCell(1);
+        agentCell.SetCellValue(agentValue);
+        agentCell.CellStyle = numberStyle;
+
+        // Setting TimesheetOwner cell
+        var timesheetOwnerCell = dataRow.CreateCell(2);
+        timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+        timesheetOwnerCell.CellStyle = numberStyle; // Apply appropriate style as needed
+
+        // Setting Total Talking time cell
+        var totalTalkingTimeCell = dataRow.CreateCell(3);
+        totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+        totalTalkingTimeCell.CellStyle = timeStyle;
+
+        // Method to extract character values from a string and remove commas
+        static string ExtractCharacterValues(string input)
+        {
+            StringBuilder result = new StringBuilder();
+            foreach (char c in input)
+            {
+                if (!char.IsDigit(c) && c != '\t' && c != ',')
+                {
+                    result.Append(c);
+                }
+            }
+            return result.ToString().Trim();
+        }
+
+        // Method to extract value after the last comma for total talking time
+        static string ExtractTotalTalkingTime(string input)
+        {
+            // Split by comma and take the last part
+            string[] parts = input.Split(',');
+            if (parts.Length > 1)
+            {
+                return parts[parts.Length - 1].Trim();
+            }
+            else
+            {
+                return "";
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Explanation:
+
+1. **Extracting Agent Value**: Same as before, split `columns[0]` to extract numeric agent value.
+2. **Extracting TimesheetOwner Value**: Use `ExtractCharacterValues` method to extract character values and then remove commas using `Replace(",", "")`.
+3. **Extracting Total Talking Time**: Use `ExtractTotalTalkingTime` method to split the input string by commas and take the last part, which represents `totalTalkingTimeValue`.
+4. **Setting Total Talking Time**: Assign `totalTalkingTimeValue` to the cell in column D (`totalTalkingTimeCell`).
+
+Ensure that the `ExtractTotalTalkingTime` method is static and defined within the `ProcessDataRows` method or within the class if you prefer, to correctly parse the input string and extract the desired value after the last comma. Adjust the logic further as per any specific nuances in your input file format.
