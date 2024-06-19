@@ -1,0 +1,151 @@
+To ensure that all input Excel files are consolidated into the same output file without creating new files each time, you need to modify the `CreateOrUpdateExcelFile` method to append data from each input file to the existing output file. Here's how you can achieve this:
+
+1. **Define the Output File Path**: 
+   - Use a fixed path for the output file where all data will be consolidated. You can choose a path on the desktop or any other location as needed.
+
+2. **Modify the `CreateOrUpdateExcelFile` Method**: 
+   - Ensure that the method checks if the output file exists.
+   - If the file exists, open it and append data from the new input file.
+   - If the file doesn't exist, create a new workbook and sheet.
+
+Here's the revised approach:
+
+```csharp
+public class WebScraping : IDisposable
+{
+    // Define the output file path where all data will be consolidated
+    string outputFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ConsolidatedOutput.xlsx");
+
+    // Other class members...
+
+    public string CreateOrUpdateExcelFile(string excelFilePath, string sheetName)
+    {
+        try
+        {
+            IWorkbook workbook;
+
+            // Check if the output file already exists
+            if (File.Exists(outputFilePath))
+            {
+                using (FileStream file = new FileStream(outputFilePath, FileMode.Open, FileAccess.ReadWrite))
+                {
+                    workbook = new XSSFWorkbook(file);
+
+                    // Check if the sheet already exists
+                    ISheet sheet = workbook.GetSheet(sheetName);
+                    if (sheet == null)
+                    {
+                        sheet = workbook.CreateSheet(sheetName);
+                    }
+
+                    // Load data from the input Excel file
+                    using (var inputStream = File.OpenRead(excelFilePath))
+                    {
+                        var inputWorkbook = new XSSFWorkbook(inputStream);
+                        var inputSheet = inputWorkbook.GetSheetAt(0); // Assuming data is in the first sheet
+
+                        // Append rows to the output sheet
+                        int rowCount = sheet.PhysicalNumberOfRows;
+                        for (int i = 0; i <= inputSheet.LastRowNum; i++)
+                        {
+                            var inputRow = inputSheet.GetRow(i);
+                            var outputRow = sheet.CreateRow(rowCount++);
+
+                            // Copy cells from input row to output row
+                            for (int j = 0; j < inputRow.LastCellNum; j++)
+                            {
+                                var inputCell = inputRow.GetCell(j);
+                                var outputCell = outputRow.CreateCell(j, inputCell.CellType);
+
+                                // Copy cell value and style
+                                switch (inputCell.CellType)
+                                {
+                                    case CellType.Numeric:
+                                        outputCell.SetCellValue(inputCell.NumericCellValue);
+                                        break;
+                                    case CellType.String:
+                                        outputCell.SetCellValue(inputCell.StringCellValue);
+                                        break;
+                                    // Handle other cell types as needed
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Create a new workbook and sheet if the output file doesn't exist
+                workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet(sheetName);
+
+                // Load data from the input Excel file
+                using (var inputStream = File.OpenRead(excelFilePath))
+                {
+                    var inputWorkbook = new XSSFWorkbook(inputStream);
+                    var inputSheet = inputWorkbook.GetSheetAt(0); // Assuming data is in the first sheet
+
+                    // Append rows to the output sheet
+                    for (int i = 0; i <= inputSheet.LastRowNum; i++)
+                    {
+                        var inputRow = inputSheet.GetRow(i);
+                        var outputRow = sheet.CreateRow(i);
+
+                        // Copy cells from input row to output row
+                        for (int j = 0; j < inputRow.LastCellNum; j++)
+                        {
+                            var inputCell = inputRow.GetCell(j);
+                            var outputCell = outputRow.CreateCell(j, inputCell.CellType);
+
+                            // Copy cell value and style
+                            switch (inputCell.CellType)
+                            {
+                                case CellType.Numeric:
+                                    outputCell.SetCellValue(inputCell.NumericCellValue);
+                                    break;
+                                case CellType.String:
+                                    outputCell.SetCellValue(inputCell.StringCellValue);
+                                    break;
+                                // Handle other cell types as needed
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Save the workbook to the output file
+            using (FileStream fileOut = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+            {
+                workbook.Write(fileOut);
+            }
+
+            return outputFilePath;
+        }
+        catch (Exception ex)
+        {
+            LogToErrorFile(ex.Message);
+            StartConsoleWriting(ex.Message);
+            return string.Empty;
+        }
+    }
+
+    // Other methods...
+
+}
+```
+
+### Explanation:
+
+- **Output File Path**: 
+  - `outputFilePath` is defined as a fixed path where all data will be consolidated (`ConsolidatedOutput.xlsx` on the desktop).
+
+- **CreateOrUpdateExcelFile Method**: 
+  - The method checks if `outputFilePath` exists.
+  - If the file exists, it opens it and appends data from the new input Excel file to the existing sheet.
+  - If the file doesn't exist, it creates a new workbook and sheet and copies data from the input Excel file.
+
+- **Copying Cells**: 
+  - Cells are copied from the input file to the output sheet, preserving cell values and types (numeric, string, etc.).
+  - This ensures that data from each input file is appended to the existing output file without overwriting or creating new files.
+
+Make sure to integrate this method into your existing `WebScraping` class and adjust any other parts of your application that interact with input Excel files accordingly. This approach consolidates all input Excel data into a single output file, facilitating easy data management and access.
