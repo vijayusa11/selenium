@@ -1,0 +1,209 @@
+The error "Index was outside the bounds of the array" suggests that the code is trying to access an array element that doesn't exist. This usually happens if the CSV file doesn't have the expected number of columns. To handle this, we'll add checks to ensure the correct number of columns are present before accessing them.
+
+Let's update the `ProcessDataRows` method to include these checks and improve the overall robustness:
+
+```csharp
+private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+{
+    try
+    {
+        if (file != null)
+        {
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+            if (fileNameWithoutExtension.Contains("Global"))
+            {
+                dailyActivitySheetName = fileNameWithoutExtension;
+            }
+
+            if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+            {
+                CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+            }
+        }
+        else
+        {
+            LogToErrorFile(notFoundMessage);
+            Console.WriteLine(notFoundMessage);
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+    }
+}
+
+public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+{
+    try
+    {
+        using (var workbook = new XSSFWorkbook())
+        {
+            string sourcefile = string.Empty;
+
+            if (aAPCSRFile != null)
+            {
+                sourcefile = aAPCSRFile.ToString();
+            }
+
+            outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+            if (sheetName != null)
+            {
+                ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                if (sourcefile != string.Empty)
+                {
+                    LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                }
+                if (sheetName != string.Empty)
+                {
+                    using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                    {
+                        workbook.Write(stream);
+                    }
+                    Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                }
+                else
+                {
+                    StartConsoleWriting("...File Not Found...!");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+    return "";
+}
+
+public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+{
+    try
+    {
+        XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+        XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+        XSSFCellStyle timeStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+        timeStyle.DataFormat = workbook.CreateDataFormat().GetFormat("hh:mm:ss");
+
+        using (TextFieldParser reader = new TextFieldParser(filePath))
+        {
+            reader.HasFieldsEnclosedInQuotes = true;
+            reader.SetDelimiters("\t");
+
+            int rowIndex = 0;
+
+            while (!reader.EndOfData)
+            {
+                var valueLines = reader.ReadFields();
+                if (rowIndex == 0)
+                {
+                    CreateHeaderRow(sheet, numberStyle);
+                }
+                else if (valueLines.Length >= 9 && int.TryParse(valueLines[0].Split(' ')[0], out _)) // Check if the first part is numeric and there are enough columns
+                {
+                    ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle, timeStyle);
+                }
+                rowIndex++;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+        throw;
+    }
+}
+
+void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+{
+    try
+    {
+        // Create a new row at the top of the sheet for the header
+        var headerRow = sheet.CreateRow(0);
+
+        // Define the headers
+        string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+        // Loop through each header and create a cell in the header row
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(headers[i]); // Set the header text
+            cell.CellStyle = style; // Apply the style to the cell
+        }
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+
+void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle, XSSFCellStyle timeStyle)
+{
+    try
+    {
+        if (valueLines.Length < 9)
+        {
+            StartConsoleWriting($"Skipping row {rowIndex} due to insufficient columns.");
+            return;
+        }
+
+        // Extracting values from the input line
+        string agentValue = valueLines[0].Split(' ')[0];
+        string timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim();
+        string totalTalkingTimeValue = valueLines[8]; // Column I (9th column) in the input is the total talking time
+
+        // Create a new row for data
+        var dataRow = sheet.CreateRow(rowIndex);
+
+        // Setting Date cell with current date
+        var dateCell = dataRow.CreateCell(0);
+        dateCell.SetCellValue(DateTime.Now);
+        dateCell.CellStyle = dateStyle;
+
+        // Setting Agent cell
+        var agentCell = dataRow.CreateCell(1);
+        agentCell.SetCellValue(agentValue);
+        agentCell.CellStyle = numberStyle;
+
+        // Setting TimesheetOwner cell
+        var timesheetOwnerCell = dataRow.CreateCell(2);
+        timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+        timesheetOwnerCell.CellStyle = numberStyle;
+
+        // Setting Total Talking time cell
+        var totalTalkingTimeCell = dataRow.CreateCell(3);
+        totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+        totalTalkingTimeCell.CellStyle = timeStyle;
+    }
+    catch (Exception ex)
+    {
+        LogToErrorFile(ex.Message);
+        StartConsoleWriting(ex.Message);
+    }
+}
+```
+
+### Key Updates:
+1. **Column Check**: 
+   - Added a check in `LoadDailyPatientSiteCsvData` and `ProcessDataRows` to ensure the `valueLines` array has at least 9 elements to avoid out-of-bounds access.
+
+2. **Row Skipping**: 
+   - In `ProcessDataRows`, if the `valueLines` array does not have enough columns, it logs a message and skips processing that row.
+
+### Handling Data
+- The input file must have at least 9 columns to match the expected format.
+- The code extracts the agent number and timesheet owner from column A.
+- It sets the current date in column A of the output.
+- It writes the agent number and timesheet owner in columns B and C, respectively.
+- It writes the total talking time from column I in the input file to column D in the output file.
+
+This should handle rows with insufficient data more gracefully and prevent the "Index was outside the bounds of the array" error.
