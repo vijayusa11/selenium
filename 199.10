@@ -3,3 +3,32 @@ and want to get Spare only that is remaining part of input file column A
 so what line i can write here in place of string timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim();
 and 00:00:00 want to write in cloumn D so
 only give these  lines solution only 
+.........
+.........
+
+To extract the remaining part of the input file's Column A (after the numeric agent value) into `TimesheetOwner` and place `00:00:00` into Column D (`Total Talking time`), you can modify the line for `timesheetOwnerValue` and ensure `totalTalkingTimeValue` is correctly assigned. Here's how you can adjust those lines:
+
+```csharp
+// Extracting values from the input line
+string agentValue = valueLines[0].Split('\t')[0]; // Split by tab to ensure we get the full agent value
+string timesheetOwnerValue = string.Join(' ', valueLines[0].Split(' ').Skip(1)).Trim();
+string totalTalkingTimeValue = valueLines[7]; // Assuming this is the total talking time column
+
+// For TimesheetOwner, if you want only the remaining part after the agentValue:
+timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim().Trim('\t');
+
+// Setting Total Talking time cell to 00:00:00
+var totalTalkingTimeCell = dataRow.CreateCell(3);
+totalTalkingTimeCell.SetCellValue("00:00:00");
+totalTalkingTimeCell.CellStyle = timeStyle;
+```
+
+### Explanation:
+
+1. **Extracting Agent Value**: Use `Split('\t')[0]` to ensure you get the full value in case there are tabs in the input.
+   
+2. **Extracting TimesheetOwner Value**: Use `Substring(agentValue.Length).Trim().Trim('\t')` to get the remaining part of the string after the agentValue, trimming any extra spaces or tabs.
+
+3. **Setting Total Talking Time**: Directly set `totalTalkingTimeCell` to `"00:00:00"` as per your requirement.
+
+These adjustments should help you correctly extract the `TimesheetOwner` and set `Total Talking time` as specified. Make sure to integrate these lines into your existing method within the appropriate context.
