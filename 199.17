@@ -1,0 +1,88 @@
+To write a connection string in the `app.config` file for your application, follow these steps:
+
+### Step 1: Open `app.config`
+If your project doesn't already have an `app.config` file, create one. In Visual Studio, you can add it by right-clicking your project, selecting "Add", and then choosing "New Item". Select "Application Configuration File" and name it `App.config`.
+
+### Step 2: Add the Connection String
+Add the following XML to the `app.config` file:
+
+```xml
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <connectionStrings>
+    <add name="YourConnectionStringName" 
+         connectionString="Data Source=YourServerName;Initial Catalog=YourDatabaseName;Integrated Security=True;User ID=YourUsername;Password=YourPassword" 
+         providerName="System.Data.SqlClient" />
+  </connectionStrings>
+</configuration>
+```
+
+### Example Breakdown:
+- **name**: A unique name for your connection string. This is how you'll refer to it in your code.
+- **connectionString**: The actual connection string to your SQL Server database.
+  - `Data Source=YourServerName`: The name of your SQL Server instance.
+  - `Initial Catalog=YourDatabaseName`: The name of the database you are connecting to.
+  - `Integrated Security=True`: Use Windows Authentication.
+  - `User ID=YourUsername;Password=YourPassword`: Use SQL Server Authentication. (Remove `Integrated Security=True` if using this)
+
+**Example**:
+```xml
+<configuration>
+  <connectionStrings>
+    <add name="DefaultConnection" 
+         connectionString="Data Source=localhost;Initial Catalog=YourDatabase;Integrated Security=True;" 
+         providerName="System.Data.SqlClient" />
+  </connectionStrings>
+</configuration>
+```
+
+### Step 3: Using the Connection String in Your Code
+In your C# code, you can access this connection string as follows:
+
+```csharp
+using System.Configuration;
+using System.Data.SqlClient;
+
+// Get the connection string from app.config
+string connectionString = ConfigurationManager.ConnectionStrings["YourConnectionStringName"].ConnectionString;
+
+// Use the connection string to connect to the database
+using (SqlConnection connection = new SqlConnection(connectionString))
+{
+    connection.Open();
+    // Your database operations here
+}
+```
+
+### Complete Integration with Your Code
+Here's a simple method that reads the connection string and inserts data into the database:
+
+```csharp
+public void InsertIntoDatabase(string date, string agent, string timesheetOwner, string totalTalkingTime)
+{
+    string connectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+    
+    using (SqlConnection connection = new SqlConnection(connectionString))
+    {
+        connection.Open();
+        string query = "INSERT INTO YourTableName (Date, Agent, TimesheetOwner, TotalTalkingTime) VALUES (@Date, @Agent, @TimesheetOwner, @TotalTalkingTime)";
+        
+        using (SqlCommand command = new SqlCommand(query, connection))
+        {
+            command.Parameters.AddWithValue("@Date", date);
+            command.Parameters.AddWithValue("@Agent", agent);
+            command.Parameters.AddWithValue("@TimesheetOwner", timesheetOwner);
+            command.Parameters.AddWithValue("@TotalTalkingTime", totalTalkingTime);
+
+            command.ExecuteNonQuery();
+        }
+    }
+}
+```
+
+### Notes:
+- Make sure to include error handling in your actual implementation.
+- Adjust the column names in the `INSERT INTO` statement to match your database schema.
+- Ensure your application has the necessary permissions to access the SQL Server database.
+
+By following these steps, you will have a properly configured `app.config` with a connection string, and your C# application will be able to use this connection
