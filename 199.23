@@ -1,0 +1,381 @@
+To save all input Excel files' output into a single output file (rather than creating new folders and paths for each run), you need to modify the logic to append data to an existing Excel file. Here’s how you can achieve this:
+
+### Step 1: Modify Directory Setup
+Ensure that you set a fixed path for the output file on the desktop and avoid creating new directories for each run.
+
+### Step 2: Update `ProcessFile` Method
+Update the `ProcessFile` method to append data to the existing output file.
+
+### Step 3: Append Data to Existing Excel File
+Modify the logic to open the existing Excel file and append data instead of creating a new file each time.
+
+Here's the updated code:
+
+```csharp
+using MedsolDataEntryAutomation.Services;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.VisualBasic.FileIO;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace MedsolPhoneEntry
+{
+    public class WebScraping : IDisposable
+    {
+        public string outputFilePath = string.Empty;
+        string dailyActivitySheetName = string.Empty;
+        DateTime currentMonthYear = DateTime.Now;
+        string getMonthYear = string.Empty;
+        int rowIndexColumn = 0;
+
+        public static string? importFilePath = Convert.ToString(ConfigurationManager.AppSettings["ImportFilePath"]);
+        public static string? exportFilePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\OutputFile.xlsx"; // Save to desktop
+        public static string? errorLogFilePath = Convert.ToString(ConfigurationManager.AppSettings["ErrorLogFilePath"]);
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+        }
+
+        public void StartPhoneEntryProcess(string[] args)
+        {
+            try
+            {
+                StartConsoleWriting("Start BOT");
+
+                if (importFilePath != null)
+                {
+                    var importDirectory = new DirectoryInfo(importFilePath);
+                    var files = importDirectory.GetFiles("*.csv").OrderByDescending(f => f.LastWriteTime).ToList();
+
+                    if (files.Any())
+                    {
+                        ProcessFiles(files);
+                        DeleteImportFiles(importFilePath); // Delete all existing files from Import folder after processing.
+                    }
+                    else
+                    {
+                        LogToErrorFile("File not found in ImportFile Folder.");
+                        Console.WriteLine("File not found in ImportFile Folder.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                StartConsoleWriting(ex.Message);
+                LogToErrorFile(ex.Message);
+            }
+        }
+
+        private void DeleteImportFiles(string importDirectory)
+        {
+            if (Directory.Exists(importDirectory))
+            {
+                foreach (var file in Directory.GetFiles(importDirectory))
+                {
+                    File.Delete(file);
+                }
+                Console.WriteLine("Files deleted from import directory.");
+            }
+        }
+
+        private void ProcessFiles(List<FileInfo> fileList)
+        {
+            try
+            {
+                var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Global".ToUpper()) && IsCsvFile(t));
+                ProcessFile(dailyActivityFile, dailyActivitySheetName, "Daily Activity file not found.");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+        {
+            try
+            {
+                if (file != null)
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+                    if (fileNameWithoutExtension.Contains("Global"))
+                    {
+                        dailyActivitySheetName = fileNameWithoutExtension;
+                        sheetName = dailyActivitySheetName;
+                    }
+
+                    if (!string.IsNullOrEmpty(dailyActivitySheetName) && fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+                    {
+                        outputFilePath = exportFilePath;
+                        CreateOrUpdateExcelFile(file, sheetName);
+                        InsertIntoDatabase(outputFilePath, sheetName); // Insert data into database after creating/updating Excel
+                    }
+                }
+                else
+                {
+                    LogToErrorFile(notFoundMessage);
+                    Console.WriteLine(notFoundMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+        }
+
+        public void CreateOrUpdateExcelFile(FileInfo csvFile, string sheetName)
+        {
+            try
+            {
+                IWorkbook workbook;
+                ISheet sheet;
+
+                if (File.Exists(outputFilePath))
+                {
+                    using (var fs = new FileStream(outputFilePath, FileMode.Open, FileAccess.Read))
+                    {
+                        workbook = new XSSFWorkbook(fs);
+                    }
+
+                    sheet = workbook.GetSheet(sheetName) ?? workbook.CreateSheet(sheetName);
+                }
+                else
+                {
+                    workbook = new XSSFWorkbook();
+                    sheet = workbook.CreateSheet(sheetName);
+                }
+
+                LoadDailyPatientSiteCsvData(csvFile.FullName, sheet, (XSSFWorkbook)workbook, sheetName);
+
+                using (var fs = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs);
+                }
+                Console.WriteLine(sheetName + "...csv file processed and saved to XLSX successfully...");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        private void InsertIntoDatabase(string excelFilePath, string sheetName)
+        {
+            if (string.IsNullOrEmpty(sheetName))
+            {
+                LogToErrorFile("Sheet name is null or empty.");
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString))
+                {
+                    connection.Open();
+
+                    string query = @"INSERT into OutputFileDetails (Date, Agent, TimesheetOwner, TotalTalkingTime)
+                                     values (@Date, @Agent, @TimesheetOwner, @TotalTalkingTime)";
+
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (var workbook = new XSSFWorkbook(File.Open(excelFilePath, FileMode.Open, FileAccess.Read)))
+                        {
+                            ISheet sheet = workbook.GetSheet(sheetName);
+
+                            if (sheet == null)
+                            {
+                                LogToErrorFile($"Sheet '{sheetName}' not found in workbook.");
+                                return;
+                            }
+
+                            for (int i = 1; i <= sheet.LastRowNum; i++)
+                            {
+                                var row = sheet.GetRow(i);
+                                if (row == null)
+                                {
+                                    LogToErrorFile($"Row {i} is null.");
+                                    continue;
+                                }
+
+                                DateTime date = row.GetCell(0).DateCellValue;
+                                string agent = row.GetCell(1).StringCellValue;
+                                string timesheetOwner = row.GetCell(2).StringCellValue;
+                                string totalTalkingTime = row.GetCell(3).StringCellValue;
+
+                                command.Parameters.Clear();
+                                command.Parameters.AddWithValue("@Date", date);
+                                command.Parameters.AddWithValue("@Agent", agent);
+                                command.Parameters.AddWithValue("@TimesheetOwner", timesheetOwner);
+                                command.Parameters.AddWithValue("@TotalTalkingTime", totalTalkingTime);
+
+                                command.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+        {
+            try
+            {
+                XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+                dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+                XSSFCellStyle timeStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+                timeStyle.DataFormat = workbook.CreateDataFormat().GetFormat("hh:mm:ss");
+
+                using (TextFieldParser reader = new TextFieldParser(filePath))
+                {
+                    reader.HasFieldsEnclosedInQuotes = true;
+                    reader.SetDelimiters("\t");
+
+                    int rowIndex = sheet.LastRowNum + 1; // Start after the last row
+
+                    while (!reader.EndOfData)
+                    {
+                        var valueLines = reader.ReadFields();
+                        if (rowIndex == 1)
+                        {
+                            CreateHeaderRow(sheet, workbook.CreateCellStyle());
+                            rowIndex++;
+                        }
+                        else if (int.TryParse(valueLines[0].Split(' ')[0], out _))
+                        {
+                            ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, timeStyle);
+                            rowIndex++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+                throw;
+            }
+        }
+
+        void CreateHeaderRow(ISheet sheet, ICellStyle style)
+        {
+            try
+            {
+                var headerRow = sheet.CreateRow(0);
+
+                string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    var cell = headerRow.CreateCell(i);
+                    cell.SetCellValue(headers[i]);
+                    cell.CellStyle = style;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+       
+
+var dateCell = dataRow.CreateCell(0);
+                dateCell.SetCellValue(DateTime.Today); // Assuming you want today's date
+                dateCell.CellStyle = dateStyle;
+
+                string agentValue = ExtractAgentValue(valueLines[0]);
+                string timesheetOwnerValue = ExtractTimesheetOwner(valueLines[0]);
+                string totalTalkingTimeValue = ExtractTotalTalkingTime(valueLines[0]);
+
+                var agentCell = dataRow.CreateCell(1);
+                agentCell.SetCellValue(agentValue);
+
+                var timesheetOwnerCell = dataRow.CreateCell(2);
+                timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+
+                var totalTalkingTimeCell = dataRow.CreateCell(3);
+                totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+                totalTalkingTimeCell.CellStyle = timeStyle;
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        private string ExtractAgentValue(string input)
+        {
+            string[] parts = input.Split(' ');
+            return parts[0];
+        }
+
+        private string ExtractTimesheetOwner(string input)
+        {
+            string[] parts = input.Split(' ');
+            return parts.Length > 1 ? parts[1] : string.Empty;
+        }
+
+        private string ExtractTotalTalkingTime(string input)
+        {
+            string[] parts = input.Split(',');
+            return parts.Length > 1 ? parts[parts.Length - 1].Trim() : string.Empty;
+        }
+
+        public static bool IsCsvFile(FileInfo file)
+        {
+            return file.Extension.ToUpper() == ".CSV";
+        }
+
+        public static void StartConsoleWriting(string message)
+        {
+            Console.WriteLine(message);
+            Thread.Sleep(5000);
+        }
+
+        public static void LogToErrorFile(string errorMsg)
+        {
+            try
+            {
+                CreateFolderIfNeeded(errorLogFilePath);
+
+                string path = errorLogFilePath + @"\DataEntryBOT.txt";
+
+                using (StreamWriter sw = (File.Exists(path)) ? File.AppendText(path) : File.CreateText(path))
+                {
+                    sw.WriteLine(errorMsg + Environment.NewLine);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void CreateFolderIfNeeded(string folderPath)
+        {
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+        }
+    }
+}
