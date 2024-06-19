@@ -1,0 +1,207 @@
+To insert the generated Excel data into a SQL Server database table, you'll need to enhance your existing code to include database connectivity and data insertion logic. Below, I'll guide you through integrating SQL Server database operations into your `WebScraping` class.
+
+### Step-by-Step Guide:
+
+1. **Add SQL Server Database Configuration:**
+   Ensure you have the necessary SQL Server connection details (server name, database name, credentials).
+
+2. **Setup Database Connection:**
+   Utilize ADO.NET (`SqlConnection`, `SqlCommand`) for database operations.
+
+3. **Insert Data into Database:**
+   After processing each Excel file, insert the data into your SQL Server database table.
+
+### Example Implementation:
+
+Here’s how you can integrate SQL Server database insertion into your existing code:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using MedsolDataEntryAutomation.Services;
+using Microsoft.VisualBasic.FileIO;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+
+namespace MedsolPhoneEntry
+{
+    public class WebScraping : IDisposable
+    {
+        // Add your SQL Server connection string here
+        private string connectionString = ConfigurationManager.ConnectionStrings["YourConnectionStringName"].ConnectionString;
+
+        // Other existing fields and methods remain unchanged
+
+        public void ProcessFiles(List<FileInfo> fileList)
+        {
+            try
+            {
+                var dailyActivityFile = fileList.FirstOrDefault(t => t.Name.ToUpper().Contains("Global".ToUpper()) && IsCsvFile(t));
+                ProcessFile(dailyActivityFile, dailyActivitySheetName, "Daily Activity file not found.");
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+        {
+            try
+            {
+                if (file != null)
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+                    if (fileNameWithoutExtension.Contains("Global"))
+                    {
+                        dailyActivitySheetName = fileNameWithoutExtension;
+                    }
+
+                    if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+                    {
+                        string outputFilePath = CreateExcelForDailyPatientSiteFile(file, fileNameWithoutExtension);
+                        if (!string.IsNullOrEmpty(outputFilePath))
+                        {
+                            InsertIntoDatabase(outputFilePath, sheetName); // Insert data into database after creating Excel
+                        }
+                    }
+                }
+                else
+                {
+                    LogToErrorFile(notFoundMessage);
+                    Console.WriteLine(notFoundMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+            }
+        }
+
+        public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string sheetName)
+        {
+            string outputFilePath = string.Empty;
+            try
+            {
+                using (var workbook = new XSSFWorkbook())
+                {
+                    string sourcefile = string.Empty;
+
+                    if (aAPCSRFile != null)
+                    {
+                        sourcefile = aAPCSRFile.ToString();
+                    }
+
+                    outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+                    if (sheetName != null)
+                    {
+                        ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                        if (sourcefile != string.Empty)
+                        {
+                            LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                        }
+                        if (sheetName != string.Empty)
+                        {
+                            using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                            {
+                                workbook.Write(stream);
+                            }
+                            Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                        }
+                        else
+                        {
+                            StartConsoleWriting("...File Not Found...!");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+            return outputFilePath;
+        }
+
+        private void InsertIntoDatabase(string excelFilePath, string sheetName)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Assuming your table has columns Date, Agent, TimesheetOwner, TotalTalkingTime
+                    string query = @"INSERT INTO YourTableName (Date, Agent, TimesheetOwner, TotalTalkingTime)
+                                     VALUES (@Date, @Agent, @TimesheetOwner, @TotalTalkingTime)";
+
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (var workbook = new XSSFWorkbook(File.Open(excelFilePath, FileMode.Open, FileAccess.Read)))
+                        {
+                            ISheet sheet = workbook.GetSheet(sheetName);
+
+                            // Start from row 1 to skip headers (assuming headers are in row 0)
+                            for (int i = 1; i <= sheet.LastRowNum; i++)
+                            {
+                                var row = sheet.GetRow(i);
+
+                                // Extracting values from Excel rows
+                                DateTime date = row.GetCell(0).DateCellValue; // Adjust cell index based on your column order
+                                string agent = row.GetCell(1).StringCellValue;
+                                string timesheetOwner = row.GetCell(2).StringCellValue;
+                                string totalTalkingTime = row.GetCell(3).StringCellValue;
+
+                                // Set parameters
+                                command.Parameters.Clear();
+                                command.Parameters.AddWithValue("@Date", date);
+                                command.Parameters.AddWithValue("@Agent", agent);
+                                command.Parameters.AddWithValue("@TimesheetOwner", timesheetOwner);
+                                command.Parameters.AddWithValue("@TotalTalkingTime", totalTalkingTime);
+
+                                // Execute SQL command
+                                command.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToErrorFile(ex.Message);
+                StartConsoleWriting(ex.Message);
+            }
+        }
+
+        // Other methods and fields as before
+    }
+}
+```
+
+### Explanation:
+
+- **Connection String**: Replace `"YourConnectionStringName"` with the name of the connection string defined in your `app.config` or `web.config` file.
+  
+- **InsertIntoDatabase Method**: This method connects to the SQL Server database, opens a connection, prepares an `INSERT` SQL query, and then iterates through rows in the Excel file to extract data and insert it into the database table.
+
+- **Excel Data Extraction**: Uses NPOI library to read data from the Excel file. Adjust the `sheet.GetRow(i)` and `row.GetCell(j)` indices based on your specific Excel file structure.
+
+- **Error Handling**: Includes basic error handling to log exceptions to an error file and display messages to the console.
+
+### Notes:
+
+- Ensure your SQL Server table (`YourTableName`) structure matches the data being inserted (`Date`, `Agent`, `TimesheetOwner`, `TotalTalkingTime`).
+
+- Handle SQL injection and other security concerns appropriately if deploying in a production environment.
+
+- Adjust the Excel cell indices and data types (`DateCellValue`, `StringCellValue`, etc.) based on your actual Excel file structure.
+
+This example provides a foundation for integrating Excel data processing with SQL Server database operations in your application. Adjustments may be necessary based on specific requirements and environment configurations.
