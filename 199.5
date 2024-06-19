@@ -16,5 +16,188 @@ for output file column A will today date
 column B and C will exact same as earlier format Agent and	TimesheetOwner
 input column I will output column D
 
+code is -
+ private void ProcessFile(FileInfo file, string sheetName, string notFoundMessage)
+ {
+     try
+     {
+         if (file != null)
+         {
+             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.Name);
+             if (fileNameWithoutExtension.Contains("Global"))
+             {
+                 dailyActivitySheetName = fileNameWithoutExtension;
+             }
+
+             if (fileNameWithoutExtension.ToUpper().Contains(sheetName.ToUpper()))
+             {
+                 CreateExcelForDailyPatientSiteFile(file, outputFilePath, fileNameWithoutExtension);
+             }
+         }
+         else
+         {
+             LogToErrorFile(notFoundMessage);
+             Console.WriteLine(notFoundMessage);
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+     }
+ }
+
+ public string CreateExcelForDailyPatientSiteFile(FileInfo aAPCSRFile, string outputFilePath, string sheetName)
+ {
+     try
+     {
+         using (var workbook = new XSSFWorkbook())
+         {
+             string sourcefile = string.Empty;
+
+             if (aAPCSRFile != null)
+             {
+                 sourcefile = aAPCSRFile.ToString();
+             }
+
+             outputFilePath = Path.Combine(exportDirectory, $"{sheetName} {getMonthYear} {currentDateTime}.xlsx");
+             if (sheetName != null)
+             {
+                 ISheet sheet = workbook.CreateSheet(sheetName); // Create a blank sheet
+
+                 if (sourcefile != string.Empty)
+                 {
+                     LoadDailyPatientSiteCsvData(sourcefile, sheet, workbook, sheetName);  // Load data from csv file and insert into blank sheet
+                 }
+                 if (sheetName != string.Empty)
+                 {
+                     using (FileStream stream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) // Save the workbook to an XLSX file
+                     {
+                         workbook.Write(stream);
+                     }
+                     Console.WriteLine(sheetName + "...csv file copied to XLSX successfully...");
+                 }
+                 else
+                 {
+                     StartConsoleWriting("...File Not Found...!");
+                 }
+             }
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+         throw;
+     }
+     return "";
+ }
+
+ public void LoadDailyPatientSiteCsvData(string filePath, ISheet sheet, XSSFWorkbook workbook, string sheetName)
+ {
+     try
+     {
+         XSSFCellStyle numberStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+         numberStyle.DataFormat = workbook.CreateDataFormat().GetFormat("General");
+
+         XSSFCellStyle dateStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+         dateStyle.DataFormat = workbook.CreateDataFormat().GetFormat("dd-MM-yyyy");
+
+         XSSFCellStyle timeStyle = (XSSFCellStyle)workbook.CreateCellStyle();
+         timeStyle.DataFormat = workbook.CreateDataFormat().GetFormat("hh:mm:ss");
+
+         using (TextFieldParser reader = new TextFieldParser(filePath))
+         {
+             reader.HasFieldsEnclosedInQuotes = true;
+             reader.SetDelimiters("\t");
+
+             int rowIndex = 0;
+
+             while (!reader.EndOfData)
+             {
+                 var valueLines = reader.ReadFields();
+                 if (rowIndex == 0)
+                 {
+                     CreateHeaderRow(sheet, numberStyle);
+                     rowIndex++;
+                 }
+                 else if (int.TryParse(valueLines[0].Split(' ')[0], out _)) // Check if the first part is numeric
+                 {
+                     ProcessDataRows(sheet, rowIndex, valueLines, dateStyle, numberStyle, timeStyle);
+                     rowIndex++;
+                 }
+             }
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+         throw;
+     }
+ }
+
+ void CreateHeaderRow(ISheet sheet, XSSFCellStyle style)
+ {
+     try
+     {
+         // Create a new row at the top of the sheet for the header
+         var headerRow = sheet.CreateRow(0);
+
+         // Define the headers
+         string[] headers = { "Date", "Agent", "TimesheetOwner", "Total Talking time" };
+
+         // Loop through each header and create a cell in the header row
+         for (int i = 0; i < headers.Length; i++)
+         {
+             var cell = headerRow.CreateCell(i);
+             cell.SetCellValue(headers[i]); // Set the header text
+             cell.CellStyle = style; // Apply the style to the cell
+         }
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+     }
+ }
+
+ void ProcessDataRows(ISheet sheet, int rowIndex, string[] valueLines, XSSFCellStyle dateStyle, XSSFCellStyle numberStyle, XSSFCellStyle timeStyle)
+ {
+     try
+     {
+         // Extracting values from the input line
+         string agentValue = valueLines[0].Split(' ')[0];
+         string timesheetOwnerValue = valueLines[0].Substring(agentValue.Length).Trim();
+         string totalTalkingTimeValue = valueLines[7]; // Assuming this is the total talking time column
+
+         // Create a new row for data
+         var dataRow = sheet.CreateRow(rowIndex);
+
+         // Setting Date cell with current date
+         var dateCell = dataRow.CreateCell(0);
+         dateCell.SetCellValue(DateTime.Now);
+         dateCell.CellStyle = dateStyle;
+
+         // Setting Agent cell
+         var agentCell = dataRow.CreateCell(1);
+         agentCell.SetCellValue(agentValue);
+         agentCell.CellStyle = numberStyle;
+
+         // Setting TimesheetOwner cell
+         var timesheetOwnerCell = dataRow.CreateCell(2);
+         timesheetOwnerCell.SetCellValue(timesheetOwnerValue);
+         timesheetOwnerCell.CellStyle = numberStyle;
+
+         // Setting Total Talking time cell
+         var totalTalkingTimeCell = dataRow.CreateCell(3);
+         totalTalkingTimeCell.SetCellValue(totalTalkingTimeValue);
+         totalTalkingTimeCell.CellStyle = timeStyle;
+     }
+     catch (Exception ex)
+     {
+         LogToErrorFile(ex.Message);
+         StartConsoleWriting(ex.Message);
+     }
+ }
 
 
